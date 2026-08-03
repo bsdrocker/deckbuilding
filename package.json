@@ -13,10 +13,10 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "db:migrate": "pnpm --filter @deck/db migrate",
-    "db:generate": "pnpm --filter @deck/db generate",
-    "db:seed": "pnpm --filter @deck/db seed",
-    "scryfall:import": "pnpm --filter @deck/scryfall import",
+    "db:migrate": "pnpm --filter @deck/db run migrate",
+    "db:generate": "pnpm --filter @deck/db run generate",
+    "db:seed": "pnpm --filter @deck/db run seed",
+    "scryfall:import": "pnpm --filter @deck/scryfall run import",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\""
   },
   "devDependencies": {

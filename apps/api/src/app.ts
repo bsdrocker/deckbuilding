@@ -92,6 +92,8 @@ export async function buildApp(opts: { prismaClient?: PrismaClient } = {}): Prom
   });
 
   app.get('/health', async () => ({ status: 'ok' }));
+  // Friendly root: the API has no UI — send browsers to the interactive docs.
+  app.get('/', async (_req, reply) => reply.redirect('/docs'));
 
   await app.register(registerAuthRoutes, { prefix: '/v1' });
   await app.register(registerCardRoutes, { prefix: '/v1' });
