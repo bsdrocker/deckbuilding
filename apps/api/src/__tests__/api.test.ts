@@ -152,7 +152,13 @@ describe('API integration', () => {
     expect(patch.statusCode).toBe(200);
     expect(patch.json().quantity).toBe(3);
 
-    const del = await app.inject({ method: 'DELETE', url: `/v1/decks/${deckId}/cards/${bolt.id}`, headers: authed() });
+    // Reproduce the real web client: DELETE carrying a JSON content-type but no
+    // body must not fail with FST_ERR_CTP_EMPTY_JSON_BODY.
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/v1/decks/${deckId}/cards/${bolt.id}`,
+      headers: { ...authed(), 'content-type': 'application/json' },
+    });
     expect(del.statusCode).toBe(204);
 
     const after = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();

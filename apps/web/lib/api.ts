@@ -9,7 +9,9 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   return fetch(`${BASE}${path}`, {
     ...init,
     headers: {
-      'content-type': 'application/json',
+      // Only declare a JSON body when one is actually sent — otherwise Fastify
+      // rejects bodyless requests (e.g. DELETE) with FST_ERR_CTP_EMPTY_JSON_BODY.
+      ...(init.body !== undefined ? { 'content-type': 'application/json' } : {}),
       ...(key ? { authorization: `Bearer ${key}` } : {}),
       ...(init.headers ?? {}),
     },

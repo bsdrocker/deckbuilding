@@ -41,6 +41,28 @@ export async function buildApp(opts: { prismaClient?: PrismaClient } = {}): Prom
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
+  // Tolerate bodyless requests that still declare `content-type: application/json`
+  // (common for DELETE from fetch-based clients): treat an empty body as no body
+  // instead of failing with FST_ERR_CTP_EMPTY_JSON_BODY.
+  app.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (_req, body, done) => {
+      const text = body as string;
+      if (text === undefined || text === null || text.trim() === '') {
+        done(null, undefined);
+        return;
+      }
+      try {
+        done(null, JSON.parse(text));
+      } catch {
+        const err = new Error('Invalid JSON body') as Error & { statusCode?: number };
+        err.statusCode = 400;
+        done(err, undefined);
+      }
+    },
+  );
+
   app.decorate('prisma', db);
 
   // Bearer API-key authentication used as a per-route preHandler.
