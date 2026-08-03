@@ -30,6 +30,12 @@ function oracleWriteData(o: MappedOracle) {
     reservedList: o.reservedList,
     edhrecRank: o.edhrecRank,
     cardFaces: (o.cardFaces ?? undefined) as Prisma.InputJsonValue | undefined,
+    imageUris: (o.imageUris ?? undefined) as Prisma.InputJsonValue | undefined,
+    power: o.power,
+    toughness: o.toughness,
+    loyalty: o.loyalty,
+    powerNum: o.powerNum,
+    toughnessNum: o.toughnessNum,
   };
 }
 

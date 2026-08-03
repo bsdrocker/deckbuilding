@@ -15,6 +15,9 @@ export interface CardData {
   colorIdentity: string[];
   keywords?: string[];
   legalities: Record<string, string>;
+  /** Combat stats (raw strings, e.g. "*"); parsed numerically when possible. */
+  power?: string | null;
+  toughness?: string | null;
   /** Cheapest relevant USD price, if known. */
   priceUsd?: number | null;
 }

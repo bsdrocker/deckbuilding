@@ -1,50 +1,76 @@
-import { parseQuery, type CardFilter } from '@deck/core';
+import { parseQuery, type CardClause, type CardQuery, type NumericConstraint } from '@deck/core';
 import type { OracleCard, Prisma, PrismaClient } from '@deck/db';
 import { ServiceError } from './errors.js';
 
 const ALL_COLORS = ['W', 'U', 'B', 'R', 'G'] as const;
 
-/** Translate a parsed CardFilter into a Prisma where over OracleCard. */
-export function filterToOracleWhere(filter: CardFilter): Prisma.OracleCardWhereInput {
+function numericWhere(constraints: NumericConstraint[], field: 'cmc' | 'powerNum' | 'toughnessNum'): Prisma.OracleCardWhereInput[] {
+  return constraints.map((c) => {
+    const op = c.op === '=' ? 'equals' : c.op === '>' ? 'gt' : c.op === '<' ? 'lt' : c.op === '>=' ? 'gte' : 'lte';
+    return { [field]: { [op]: c.value } } as Prisma.OracleCardWhereInput;
+  });
+}
+
+/** Translate a single AND-clause into a Prisma where over OracleCard. */
+function clauseToWhere(clause: CardClause): Prisma.OracleCardWhereInput {
   const and: Prisma.OracleCardWhereInput[] = [];
 
-  for (const n of filter.nameIncludes) and.push({ name: { contains: n, mode: 'insensitive' } });
-  for (const t of filter.typeIncludes) and.push({ typeLine: { contains: t, mode: 'insensitive' } });
-  for (const o of filter.oracleIncludes) and.push({ oracleText: { contains: o, mode: 'insensitive' } });
+  for (const n of clause.nameIncludes) and.push({ name: { contains: n, mode: 'insensitive' } });
+  for (const n of clause.nameExcludes) and.push({ NOT: { name: { contains: n, mode: 'insensitive' } } });
+  for (const t of clause.typeIncludes) and.push({ typeLine: { contains: t, mode: 'insensitive' } });
+  for (const t of clause.typeExcludes) and.push({ NOT: { typeLine: { contains: t, mode: 'insensitive' } } });
+  for (const o of clause.oracleIncludes) and.push({ oracleText: { contains: o, mode: 'insensitive' } });
+  for (const o of clause.oracleExcludes) and.push({ NOT: { oracleText: { contains: o, mode: 'insensitive' } } });
 
-  for (const c of filter.cmc) {
-    if (c.op === '=') and.push({ cmc: { equals: c.value } });
-    else if (c.op === '>') and.push({ cmc: { gt: c.value } });
-    else if (c.op === '<') and.push({ cmc: { lt: c.value } });
-    else if (c.op === '>=') and.push({ cmc: { gte: c.value } });
-    else if (c.op === '<=') and.push({ cmc: { lte: c.value } });
+  // Keywords match case-insensitively (Scryfall stores capitalized keywords).
+  for (const k of clause.keywords) {
+    and.push({ keywords: { hasSome: [k, k[0]!.toUpperCase() + k.slice(1)] } });
+  }
+  for (const k of clause.keywordsExcluded) {
+    and.push({ NOT: { keywords: { hasSome: [k, k[0]!.toUpperCase() + k.slice(1)] } } });
   }
 
-  if (filter.colors) {
-    if (filter.colors.mode === 'contains') {
-      and.push({ colors: { hasEvery: filter.colors.values } });
+  and.push(...numericWhere(clause.cmc, 'cmc'));
+  and.push(...numericWhere(clause.power, 'powerNum'));
+  and.push(...numericWhere(clause.toughness, 'toughnessNum'));
+
+  if (clause.colors) {
+    if (clause.colors.mode === 'contains') {
+      and.push({ colors: { hasEvery: clause.colors.values } });
     } else {
-      const complement = ALL_COLORS.filter((c) => !filter.colors!.values.includes(c));
-      and.push({ colors: { hasEvery: filter.colors.values } });
+      const complement = ALL_COLORS.filter((c) => !clause.colors!.values.includes(c));
+      and.push({ colors: { hasEvery: clause.colors.values } });
       if (complement.length) and.push({ NOT: { colors: { hasSome: complement } } });
     }
   }
-
-  if (filter.colorIdentityWithin) {
-    const complement = ALL_COLORS.filter((c) => !filter.colorIdentityWithin!.includes(c));
+  if (clause.colorsExcluded.length) {
+    and.push({ NOT: { colors: { hasSome: clause.colorsExcluded } } });
+  }
+  if (clause.colorIdentityWithin) {
+    const complement = ALL_COLORS.filter((c) => !clause.colorIdentityWithin!.includes(c));
     if (complement.length) and.push({ NOT: { colorIdentity: { hasSome: complement } } });
   }
-
-  if (filter.legalIn) {
+  if (clause.legalIn) {
     and.push({
       OR: [
-        { legalities: { path: [filter.legalIn], equals: 'legal' } },
-        { legalities: { path: [filter.legalIn], equals: 'restricted' } },
+        { legalities: { path: [clause.legalIn], equals: 'legal' } },
+        { legalities: { path: [clause.legalIn], equals: 'restricted' } },
       ],
     });
   }
+  if (clause.rarity.length) {
+    and.push({ printings: { some: { rarity: { in: clause.rarity } } } });
+  }
 
   return and.length ? { AND: and } : {};
+}
+
+/** Translate a parsed CardQuery (OR of clauses) into a Prisma where. */
+export function filterToOracleWhere(query: CardQuery): Prisma.OracleCardWhereInput {
+  const clauses = query.or.map(clauseToWhere).filter((w) => Object.keys(w).length > 0);
+  if (clauses.length === 0) return {};
+  if (clauses.length === 1) return clauses[0]!;
+  return { OR: clauses };
 }
 
 export interface SearchOptions {

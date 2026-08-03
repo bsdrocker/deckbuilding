@@ -18,6 +18,7 @@ import {
   getCardByName,
   getDeck,
   importDeck,
+  importInventoryCsv,
   inventorySummary,
   listDecks,
   listInventory,
@@ -273,6 +274,24 @@ async function main() {
         const results = [];
         for (const item of items) results.push(await addInventory(prisma, user.id, item));
         return json({ added: results.length, items: results });
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'import_inventory_csv',
+    {
+      title: 'Import a collection CSV',
+      description:
+        'Bulk-import a collection CSV (ManaBox/Moxfield/Deckbox export) into inventory. Returns matched vs. unresolved counts.',
+      inputSchema: { csv: z.string().describe('Raw CSV text with a header row.') },
+    },
+    async ({ csv }) => {
+      try {
+        const user = await requireUser();
+        return json(await importInventoryCsv(prisma, user.id, csv));
       } catch (err) {
         return errorResult(err);
       }

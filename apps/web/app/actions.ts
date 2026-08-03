@@ -129,3 +129,117 @@ export async function addCardsAction(deckId: string, _prev: unknown, formData: F
   if (result.unresolved?.length) return { error: `Could not find: ${result.unresolved.join(', ')}` };
   return { ok: true };
 }
+
+export interface DeckCardPatch {
+  quantity?: number;
+  board?: string;
+  printingId?: string | null;
+  categories?: string[];
+}
+
+export async function updateDeckCardAction(
+  deckId: string,
+  cardId: string,
+  patch: DeckCardPatch,
+): Promise<{ error?: string; ok?: boolean }> {
+  const res = await apiFetch(`/v1/decks/${deckId}/cards/${cardId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.message ?? 'Update failed' };
+  }
+  return { ok: true };
+}
+
+export async function removeDeckCardAction(
+  deckId: string,
+  cardId: string,
+): Promise<{ error?: string; ok?: boolean }> {
+  const res = await apiFetch(`/v1/decks/${deckId}/cards/${cardId}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 204) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.message ?? 'Remove failed' };
+  }
+  return { ok: true };
+}
+
+export interface PrintingOption {
+  scryfallId: string;
+  setCode: string;
+  setName: string;
+  collectorNumber: string;
+  rarity: string;
+  finishes: string[];
+  imageUris: { normal?: string; small?: string } | null;
+}
+
+/** Look up printings for a card by name (exact then fuzzy). */
+export async function findPrintingsByNameAction(
+  name: string,
+): Promise<{ error?: string; oracleId?: string; name?: string; printings?: PrintingOption[] }> {
+  if (!name.trim()) return { error: 'Enter a card name' };
+  const res = await apiFetch(`/v1/cards/named?name=${encodeURIComponent(name)}`);
+  if (!res.ok) return { error: `Card not found: ${name}` };
+  const card = await res.json();
+  return { oracleId: card.oracleId, name: card.name, printings: card.printings ?? [] };
+}
+
+/** Look up printings for a card by oracle id (for the deck preferred-art picker). */
+export async function findPrintingsForOracleAction(
+  oracleId: string,
+): Promise<{ error?: string; printings?: PrintingOption[] }> {
+  const res = await apiFetch(`/v1/cards/${oracleId}`);
+  if (!res.ok) return { error: 'Could not load printings' };
+  const card = await res.json();
+  return { printings: card.printings ?? [] };
+}
+
+export async function addInventoryDetailedAction(input: {
+  printingId: string;
+  quantity: number;
+  finish: string;
+  condition: string;
+  language: string;
+}): Promise<{ error?: string; ok?: boolean }> {
+  const res = await apiFetch('/v1/inventory', { method: 'POST', body: JSON.stringify(input) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.message ?? 'Could not add to inventory' };
+  }
+  return { ok: true };
+}
+
+export async function updateInventoryAction(
+  id: string,
+  patch: { quantity?: number; finish?: string; condition?: string; language?: string },
+): Promise<{ error?: string; ok?: boolean }> {
+  const res = await apiFetch(`/v1/inventory/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.message ?? 'Update failed' };
+  }
+  return { ok: true };
+}
+
+export async function deleteInventoryAction(id: string): Promise<{ error?: string; ok?: boolean }> {
+  const res = await apiFetch(`/v1/inventory/${id}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 204) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.message ?? 'Delete failed' };
+  }
+  return { ok: true };
+}
+
+export async function importInventoryCsvAction(
+  csv: string,
+): Promise<{ error?: string; imported?: number; matchedCopies?: number; unresolved?: { row: number; reason: string }[] }> {
+  if (!csv.trim()) return { error: 'Empty file' };
+  const res = await apiFetch('/v1/inventory/import', { method: 'POST', body: JSON.stringify({ csv }) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.message ?? 'Import failed' };
+  }
+  return res.json();
+}

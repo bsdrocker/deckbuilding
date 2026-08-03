@@ -153,6 +153,7 @@ export async function registerDeckRoutes(app: FastifyInstance) {
           quantity: z.number().int().min(0).optional(),
           board: z.enum(BOARDS).optional(),
           categories: z.array(z.string()).optional(),
+          printingId: z.string().nullable().optional(),
         }),
       },
     },

@@ -10,9 +10,17 @@ export interface DeckListItem {
   _count: { cards: number };
 }
 
+export interface CardImageUris {
+  small?: string;
+  normal?: string;
+  large?: string;
+  art_crop?: string;
+}
+
 export interface DeckCard {
   id: string;
   oracleId: string;
+  printingId: string | null;
   quantity: number;
   board: 'mainboard' | 'sideboard' | 'maybeboard' | 'command';
   categories: string[];
@@ -22,7 +30,14 @@ export interface DeckCard {
     cmc: number;
     typeLine: string;
     colorIdentity: string[];
+    imageUris: CardImageUris | null;
   };
+  printing: {
+    scryfallId: string;
+    setName: string;
+    collectorNumber: string;
+    imageUris: CardImageUris | null;
+  } | null;
 }
 
 export interface Deck {
@@ -69,6 +84,22 @@ export interface InventoryDiff {
   missingCopies: number;
   completionPct: number;
   missingValueUsd: number;
+  ownedValueUsd: number;
+}
+
+export interface InventoryValueBreakdown {
+  totalValueUsd: number;
+  totalCopies: number;
+  distinctCards: number;
+  topCards: {
+    name: string;
+    setCode: string;
+    collectorNumber: string;
+    finish: string;
+    quantity: number;
+    unitUsd: number;
+    totalUsd: number;
+  }[];
 }
 
 export interface CardSearchResult {
@@ -81,6 +112,9 @@ export interface CardSearchResult {
     typeLine: string;
     colorIdentity: string[];
     oracleText: string | null;
+    power: string | null;
+    toughness: string | null;
+    imageUris: CardImageUris | null;
   }[];
 }
 
@@ -95,10 +129,12 @@ export interface InventoryItem {
   quantity: number;
   finish: string;
   condition: string;
+  language: string;
   printing: {
     scryfallId: string;
     setCode: string;
     collectorNumber: string;
+    imageUris: CardImageUris | null;
     oracle: { name: string; typeLine: string };
   };
 }

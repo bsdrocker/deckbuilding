@@ -32,6 +32,17 @@ model OracleCard {
   edhrecRank   Int?    @map("edhrec_rank")
   cardFaces    Json?   @map("card_faces") // for split/mdfc/transform cards
 
+  // Denormalized image (from the card's own printing) so images are cheap in
+  // search/deck views without a printing join.
+  imageUris    Json?   @map("image_uris")
+  // Combat stats. Raw strings preserve values like "*"/"1+*"; the *Num columns
+  // hold the numeric value (null when non-numeric) for range filtering.
+  power        String?
+  toughness    String?
+  loyalty      String?
+  powerNum     Float?  @map("power_num")
+  toughnessNum Float?  @map("toughness_num")
+
   printings  CardPrinting[]
   deckCards  DeckCard[]
 
@@ -41,6 +52,8 @@ model OracleCard {
   @@index([name])
   @@index([cmc])
   @@index([edhrecRank])
+  @@index([powerNum])
+  @@index([toughnessNum])
   @@map("oracle_cards")
 }
 

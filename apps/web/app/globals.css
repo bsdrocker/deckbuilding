@@ -85,6 +85,29 @@ button.secondary, .btn.secondary { background: var(--panel-2); color: var(--text
 .card-list li:last-child { border-bottom: none; }
 .qty { color: var(--muted); min-width: 28px; }
 
+/* deck card row controls */
+.deck-card-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mana { font-size: 12px; min-width: 40px; text-align: right; }
+.qty-stepper { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.qty-stepper .step {
+  background: var(--panel-2); color: var(--text); border: none; border-radius: 0;
+  padding: 1px 8px; font-size: 15px; line-height: 1.4; cursor: pointer;
+}
+.qty-stepper .step:hover { background: var(--border); filter: none; }
+.qty-stepper .qty-val { min-width: 26px; text-align: center; font-variant-numeric: tabular-nums; }
+.board-select { padding: 3px 6px; font-size: 12px; background: var(--panel-2); }
+.remove-btn {
+  background: transparent; color: var(--muted); border: 1px solid var(--border);
+  border-radius: 6px; width: 26px; height: 26px; padding: 0; font-size: 16px; line-height: 1;
+}
+.remove-btn:hover { background: #3a2020; color: var(--danger); border-color: #6b2f2f; filter: none; }
+.art-btn {
+  background: transparent; border: 1px solid var(--border); border-radius: 6px;
+  width: 26px; height: 26px; padding: 0; font-size: 13px; line-height: 1;
+}
+.art-btn:hover { background: var(--panel-2); filter: none; }
+
 .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; color: var(--muted); }
 .pill.ok { color: var(--accent-2); border-color: #2f5b34; }
 .pill.bad { color: var(--danger); border-color: #6b2f2f; }
@@ -103,9 +126,22 @@ button.secondary, .btn.secondary { background: var(--panel-2); color: var(--text
 
 .error { color: var(--danger); font-size: 13px; margin-top: 8px; }
 .form-col { display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
+.field-label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.field-label select, .field-label input { color: var(--text); }
 .table { width: 100%; border-collapse: collapse; }
 .table th, .table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .table th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+/* card image hover popover */
+.card-hover { position: relative; }
+.card-hover-name { cursor: help; border-bottom: 1px dotted var(--border); }
+.card-hover-img {
+  display: none; position: absolute; z-index: 60; bottom: 100%; left: 0;
+  width: 244px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  pointer-events: none;
+}
+.card-hover:hover .card-hover-img { display: block; }
+.thumb { width: 34px; height: auto; border-radius: 4px; vertical-align: middle; }
+
 .color-dots { display: inline-flex; gap: 3px; }
 .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.3); }
 .dot.W { background: #f7e7b6; } .dot.U { background: #9bc7f0; } .dot.B { background: #b7a8c4; }

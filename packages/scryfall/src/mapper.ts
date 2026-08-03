@@ -16,6 +16,12 @@ export interface MappedOracle {
   reservedList: boolean;
   edhrecRank: number | null;
   cardFaces: unknown | null;
+  imageUris: unknown | null;
+  power: string | null;
+  toughness: string | null;
+  loyalty: string | null;
+  powerNum: number | null;
+  toughnessNum: number | null;
 }
 
 export interface MappedPrinting {
@@ -47,6 +53,18 @@ function joinFaces(card: ScryfallCard, field: 'mana_cost' | 'type_line' | 'oracl
   return top ?? null;
 }
 
+/** Combat stat from top-level or the front face; keeps values like "*". */
+function faceStat(card: ScryfallCard, field: 'power' | 'toughness' | 'loyalty'): string | null {
+  return card[field] ?? card.card_faces?.[0]?.[field] ?? null;
+}
+
+/** Parse a combat stat to a number, or null when non-numeric ("*", "1+*"). */
+function numeric(value: string | null): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 /**
  * Split a raw Scryfall card into normalized oracle + printing rows.
  * Returns null when the card can't be attributed to an oracle identity
@@ -71,6 +89,12 @@ export function mapCard(card: ScryfallCard): { oracle: MappedOracle; printing: M
     reservedList: card.reserved ?? false,
     edhrecRank: card.edhrec_rank ?? null,
     cardFaces: card.card_faces ?? null,
+    imageUris: card.image_uris ?? card.card_faces?.[0]?.image_uris ?? null,
+    power: faceStat(card, 'power'),
+    toughness: faceStat(card, 'toughness'),
+    loyalty: faceStat(card, 'loyalty'),
+    powerNum: numeric(faceStat(card, 'power')),
+    toughnessNum: numeric(faceStat(card, 'toughness')),
   };
 
   const printing: MappedPrinting = {

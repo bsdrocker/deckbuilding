@@ -5,10 +5,21 @@ import {
   type OwnedCard,
 } from '@deck/core';
 import type { OracleCard, PrismaClient } from '@deck/db';
+import { stringify } from 'csv-stringify/sync';
 import { filterToOracleWhere } from './cards.js';
 import { loadDeck, toDeckData } from './deckData.js';
 import { ServiceError } from './errors.js';
 import { representativePrices } from './prices.js';
+
+/** Finish-aware USD price from a printing's price JSON. */
+function finishPrice(prices: unknown, finish: string): number | null {
+  const p = (prices ?? null) as Record<string, string | null> | null;
+  if (!p) return null;
+  const key = finish === 'foil' ? 'usd_foil' : finish === 'etched' ? 'usd_etched' : 'usd';
+  const raw = p[key] ?? p.usd ?? p.usd_foil ?? null;
+  const n = raw == null ? NaN : Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
 
 export interface AddInventoryInput {
   /** Provide a printingId (Scryfall id). */
@@ -66,7 +77,7 @@ export async function updateInventoryItem(
   prisma: PrismaClient,
   userId: string,
   id: string,
-  patch: { quantity?: number; tags?: string[] },
+  patch: { quantity?: number; tags?: string[]; finish?: string; condition?: string; language?: string },
 ) {
   const item = await prisma.inventoryItem.findUnique({ where: { id } });
   if (!item || item.userId !== userId) throw new ServiceError('not_found', 'Inventory item not found.');
@@ -74,9 +85,42 @@ export async function updateInventoryItem(
     await prisma.inventoryItem.delete({ where: { id } });
     return null;
   }
+
+  const finish = patch.finish ?? item.finish;
+  const condition = patch.condition ?? item.condition;
+  const language = patch.language ?? item.language;
+  const quantity = patch.quantity ?? item.quantity;
+  const changesKey = finish !== item.finish || condition !== item.condition || language !== item.language;
+
+  // If finish/condition/language changed into a combo that already exists,
+  // merge quantities into that row and delete this one (unique key would collide).
+  if (changesKey) {
+    const conflict = await prisma.inventoryItem.findUnique({
+      where: {
+        userId_printingId_finish_condition_language: {
+          userId,
+          printingId: item.printingId,
+          finish,
+          condition,
+          language,
+        },
+      },
+    });
+    if (conflict && conflict.id !== id) {
+      const [merged] = await prisma.$transaction([
+        prisma.inventoryItem.update({
+          where: { id: conflict.id },
+          data: { quantity: { increment: quantity }, ...(patch.tags ? { tags: patch.tags } : {}) },
+        }),
+        prisma.inventoryItem.delete({ where: { id } }),
+      ]);
+      return merged;
+    }
+  }
+
   return prisma.inventoryItem.update({
     where: { id },
-    data: { quantity: patch.quantity, tags: patch.tags },
+    data: { quantity, tags: patch.tags, finish, condition, language },
   });
 }
 
@@ -126,6 +170,104 @@ export async function inventorySummary(
     totalCopies,
     estimatedValueUsd: Math.round(value * 100) / 100,
   };
+}
+
+export interface InventoryValueBreakdown {
+  totalValueUsd: number;
+  totalCopies: number;
+  distinctCards: number;
+  topCards: {
+    name: string;
+    setCode: string;
+    collectorNumber: string;
+    finish: string;
+    quantity: number;
+    unitUsd: number;
+    totalUsd: number;
+  }[];
+}
+
+/** Finish-aware collection value with the highest-value cards on top. */
+export async function inventoryValueBreakdown(
+  prisma: PrismaClient,
+  userId: string,
+  topN = 15,
+): Promise<InventoryValueBreakdown> {
+  const items = await prisma.inventoryItem.findMany({
+    where: { userId },
+    include: {
+      printing: {
+        select: { setCode: true, collectorNumber: true, prices: true, oracle: { select: { name: true } } },
+      },
+    },
+  });
+
+  let total = 0;
+  let copies = 0;
+  const rows = items.map((it) => {
+    const unit = finishPrice(it.printing.prices, it.finish) ?? 0;
+    const totalUsd = unit * it.quantity;
+    total += totalUsd;
+    copies += it.quantity;
+    return {
+      name: it.printing.oracle.name,
+      setCode: it.printing.setCode.toUpperCase(),
+      collectorNumber: it.printing.collectorNumber,
+      finish: it.finish,
+      quantity: it.quantity,
+      unitUsd: Math.round(unit * 100) / 100,
+      totalUsd: Math.round(totalUsd * 100) / 100,
+    };
+  });
+  rows.sort((a, b) => b.totalUsd - a.totalUsd);
+
+  return {
+    totalValueUsd: Math.round(total * 100) / 100,
+    totalCopies: copies,
+    distinctCards: items.length,
+    topCards: rows.slice(0, topN),
+  };
+}
+
+/** Export the user's whole collection as a CSV string (ManaBox-compatible headers). */
+export async function exportInventoryCsv(prisma: PrismaClient, userId: string): Promise<string> {
+  const items = await prisma.inventoryItem.findMany({
+    where: { userId },
+    include: {
+      printing: {
+        select: {
+          scryfallId: true,
+          setCode: true,
+          setName: true,
+          collectorNumber: true,
+          prices: true,
+          oracle: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  const records = items.map((it) => ({
+    Quantity: it.quantity,
+    Name: it.printing.oracle.name,
+    'Set code': it.printing.setCode,
+    'Set name': it.printing.setName,
+    'Collector number': it.printing.collectorNumber,
+    Foil: it.finish,
+    Condition: it.condition,
+    Language: it.language,
+    'Scryfall ID': it.printing.scryfallId,
+    'Unit USD': finishPrice(it.printing.prices, it.finish) ?? '',
+  }));
+
+  return stringify(records, {
+    header: true,
+    columns: [
+      'Quantity', 'Name', 'Set code', 'Set name', 'Collector number',
+      'Foil', 'Condition', 'Language', 'Scryfall ID', 'Unit USD',
+    ],
+  });
 }
 
 /**

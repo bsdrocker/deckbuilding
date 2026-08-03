@@ -1,8 +1,11 @@
 import {
   addInventory,
   deleteInventoryItem,
+  exportInventoryCsv,
   findOwnedOptions,
+  importInventoryCsv,
   inventorySummary,
+  inventoryValueBreakdown,
   listInventory,
   updateInventoryItem,
 } from '@deck/services';
@@ -34,6 +37,24 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
     '/inventory/summary',
     { preHandler: app.authenticate, schema: { tags: ['inventory'], summary: 'Inventory totals and estimated value.', security: [{ bearerAuth: [] }] } },
     async (req) => inventorySummary(app.prisma, req.user!.id),
+  );
+
+  r.get(
+    '/inventory/value',
+    { preHandler: app.authenticate, schema: { tags: ['inventory'], summary: 'Collection value breakdown (finish-aware, top cards).', security: [{ bearerAuth: [] }] } },
+    async (req) => inventoryValueBreakdown(app.prisma, req.user!.id),
+  );
+
+  r.get(
+    '/inventory/export.csv',
+    { preHandler: app.authenticate, schema: { tags: ['inventory'], summary: 'Export the collection as CSV.', security: [{ bearerAuth: [] }] } },
+    async (req, reply) => {
+      const csv = await exportInventoryCsv(app.prisma, req.user!.id);
+      return reply
+        .header('content-type', 'text/csv; charset=utf-8')
+        .header('content-disposition', 'attachment; filename="collection.csv"')
+        .send(csv);
+    },
   );
 
   r.get(
@@ -76,6 +97,20 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
     },
   );
 
+  r.post(
+    '/inventory/import',
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['inventory'],
+        summary: 'Bulk-import a collection CSV (ManaBox/Moxfield/Deckbox) into inventory.',
+        security: [{ bearerAuth: [] }],
+        body: z.object({ csv: z.string().min(1) }),
+      },
+    },
+    async (req) => importInventoryCsv(app.prisma, req.user!.id, req.body.csv),
+  );
+
   r.patch(
     '/inventory/:id',
     {
@@ -85,7 +120,13 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
         summary: 'Update an inventory item (quantity 0 removes it).',
         security: [{ bearerAuth: [] }],
         params: z.object({ id: z.string() }),
-        body: z.object({ quantity: z.number().int().min(0).optional(), tags: z.array(z.string()).optional() }),
+        body: z.object({
+          quantity: z.number().int().min(0).optional(),
+          tags: z.array(z.string()).optional(),
+          finish: z.string().optional(),
+          condition: z.string().optional(),
+          language: z.string().optional(),
+        }),
       },
     },
     async (req) => {

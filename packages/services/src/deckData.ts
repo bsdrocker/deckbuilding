@@ -3,17 +3,17 @@ import type { Prisma, PrismaClient } from '@deck/db';
 import { representativePrices } from './prices.js';
 
 export type DeckWithCards = Prisma.DeckGetPayload<{
-  include: { cards: { include: { oracle: true } } };
+  include: { cards: { include: { oracle: true; printing: true } } };
 }>;
 
-/** Load a deck with its cards + oracle rows. */
+/** Load a deck with its cards, oracle rows, and any preferred printing (art). */
 export async function loadDeck(
   prisma: PrismaClient,
   deckId: string,
 ): Promise<DeckWithCards | null> {
   return prisma.deck.findUnique({
     where: { id: deckId },
-    include: { cards: { include: { oracle: true } } },
+    include: { cards: { include: { oracle: true, printing: true } } },
   });
 }
 

@@ -146,6 +146,8 @@ export interface UpdateCardInput {
   quantity?: number;
   board?: Board;
   categories?: string[];
+  /** Preferred printing (art). null clears it; must belong to the same oracle. */
+  printingId?: string | null;
 }
 
 export async function updateDeckCard(
@@ -165,12 +167,26 @@ export async function updateDeckCard(
     await refreshColorIdentity(prisma, deckId);
     return null;
   }
+
+  // Validate a preferred printing belongs to this card's oracle before setting.
+  if (patch.printingId) {
+    const printing = await prisma.cardPrinting.findUnique({
+      where: { scryfallId: patch.printingId },
+      select: { oracleId: true },
+    });
+    if (!printing || printing.oracleId !== existing.oracleId) {
+      throw new ServiceError('bad_request', 'That printing does not belong to this card.');
+    }
+  }
+
   const updated = await prisma.deckCard.update({
     where: { id: deckCardId },
     data: {
       quantity: patch.quantity,
       board: patch.board as DeckBoard | undefined,
       categories: patch.categories,
+      // undefined = leave unchanged; null = clear the preferred printing.
+      printingId: patch.printingId === undefined ? undefined : patch.printingId,
     },
   });
   await refreshColorIdentity(prisma, deckId);

@@ -25,6 +25,7 @@ export interface InventoryDiff {
   missingCopies: number;
   completionPct: number; // 0..100 by copies
   missingValueUsd: number;
+  ownedValueUsd: number; // value of owned copies applied to the deck
 }
 
 const COUNTED: Board[] = ['mainboard', 'command'];
@@ -65,6 +66,7 @@ export function diffDeckAgainstInventory(
   let neededCopies = 0;
   let ownedCopies = 0;
   let missingValueUsd = 0;
+  let ownedValueUsd = 0;
   let ownedCards = 0;
 
   for (const [oracleId, req] of requiredByOracle) {
@@ -76,6 +78,7 @@ export function diffDeckAgainstInventory(
     neededCopies += req.needed;
     ownedCopies += appliedOwned;
     missingValueUsd += missingValue;
+    ownedValueUsd += appliedOwned * req.priceUsd;
     if (missing === 0) ownedCards += 1;
 
     cards.push({ oracleId, name: req.name, needed: req.needed, owned: have, missing, missingValueUsd: missingValue });
@@ -94,5 +97,6 @@ export function diffDeckAgainstInventory(
     missingCopies,
     completionPct: neededCopies === 0 ? 100 : Math.round((ownedCopies / neededCopies) * 1000) / 10,
     missingValueUsd: Math.round(missingValueUsd * 100) / 100,
+    ownedValueUsd: Math.round(ownedValueUsd * 100) / 100,
   };
 }

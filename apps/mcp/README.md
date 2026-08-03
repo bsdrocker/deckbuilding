@@ -15,6 +15,7 @@ favor cards you **already own**.
 | `create_deck` / `add_cards_to_deck` / `import_deck` | Build and populate decks. |
 | `analyze_deck` | Mana curve, color pips, type split, price, and format legality. |
 | `get_inventory` / `add_inventory` | Read/add your card collection. |
+| `import_inventory_csv` | Bulk-import a ManaBox/Moxfield/Deckbox collection CSV. |
 | **`deck_inventory_diff`** | Owned vs. missing copies for a deck, plus cost to complete. |
 | **`find_owned_options`** | Cards you already own that match a query — bias deckbuilding toward your collection. |
 

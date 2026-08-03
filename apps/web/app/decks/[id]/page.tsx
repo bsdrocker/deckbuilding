@@ -5,6 +5,7 @@ import type { Deck, DeckAnalysis, DeckCard, InventoryDiff } from '@/lib/types';
 import { ColorDots } from '@/components/ColorDots';
 import { ManaCurve } from '@/components/ManaCurve';
 import { AddCardForm } from './AddCardForm';
+import { DeckCardRow } from './DeckCardRow';
 
 const BOARD_LABELS: Record<string, string> = {
   command: 'Command Zone',
@@ -77,12 +78,7 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
                   </h3>
                   <ul className="card-list">
                     {groups[board]!.map((c) => (
-                      <li key={c.id}>
-                        <span>
-                          <span className="qty">{c.quantity}×</span> {c.oracle.name}
-                        </span>
-                        <span className="muted">{c.oracle.manaCost ?? ''}</span>
-                      </li>
+                      <DeckCardRow key={c.id} deckId={deck.id} card={c} />
                     ))}
                   </ul>
                 </div>
@@ -106,6 +102,10 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
             <div className="stat" style={{ marginTop: 8 }}>
               <span className="muted">Missing copies</span>
               <b>{diff.missingCopies}</b>
+            </div>
+            <div className="stat">
+              <span className="muted">Owned value</span>
+              <b>${diff.ownedValueUsd.toFixed(2)}</b>
             </div>
             <div className="stat">
               <span className="muted">Cost to complete</span>

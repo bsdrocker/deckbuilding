@@ -100,8 +100,24 @@ card data imported.
 - The **web app** and **MCP server** both go through `@deck/services`, so business
   rules live in one place.
 
-## Milestone 2+ (not yet built)
+## Milestone 2 (done)
 
-Public deck browsing/social, playtesting, richer Scryfall query grammar, price
-history, collaborative decks, CSV collection import, and UI polish toward full
+- **Deck card management in the UI** — quantity steppers, board moves, remove,
+  and a preferred-printing (art) picker per card.
+- **Bulk inventory import via CSV** — ManaBox/Moxfield/Deckbox exports; rows
+  resolve by Scryfall ID → set+collector → name. Endpoint `POST /v1/inventory/import`
+  and MCP tool `import_inventory_csv`.
+- **Printing / finish / condition selection** — a printing-aware inventory add
+  flow and inline editing of owned items.
+- **Card images** — Scryfall art on hover across decks, search, and inventory.
+- **Richer Scryfall search** — negation (`-`), `or`, keywords (`kw:`), rarity
+  (`r:`), and power/toughness (`pow`/`tou`) in addition to `c: id: t: o: cmc f:`.
+- **Collection value tracking** — finish-aware value rollups, top cards, per-deck
+  owned value, and CSV export (`GET /v1/inventory/export.csv`).
+
+## Milestone 3+ (not yet built)
+
+Public deck browsing/social + shareable links, playtesting/sample hands, price
+history over time, collaborative decks, the full Scryfall grammar (nested
+parentheses, all `is:` filters), and further UI polish toward full
 Moxfield/Archidekt parity.

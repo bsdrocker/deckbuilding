@@ -137,6 +137,78 @@ describe('API integration', () => {
     const body = res.json();
     expect(body.options.some((o: { name: string }) => o.name === 'Sol Ring')).toBe(true);
   });
+
+  it('manages deck cards: update quantity then remove', async () => {
+    const deck = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
+    const bolt = deck.cards.find((c: { oracle: { name: string } }) => c.oracle.name === 'Lightning Bolt');
+    expect(bolt).toBeDefined();
+
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: `/v1/decks/${deckId}/cards/${bolt.id}`,
+      headers: authed(),
+      payload: { quantity: 3 },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().quantity).toBe(3);
+
+    const del = await app.inject({ method: 'DELETE', url: `/v1/decks/${deckId}/cards/${bolt.id}`, headers: authed() });
+    expect(del.statusCode).toBe(204);
+
+    const after = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
+    expect(after.cards.find((c: { oracle: { name: string } }) => c.oracle.name === 'Lightning Bolt')).toBeUndefined();
+  });
+
+  it('imports a ManaBox-style CSV into inventory', async () => {
+    const oracle = await prisma.oracleCard.findFirst({
+      where: { name: { equals: 'Counterspell', mode: 'insensitive' } },
+      include: { printings: { take: 1 } },
+    });
+    const printingId = oracle!.printings[0]!.scryfallId;
+    const csv =
+      'Name,Set code,Collector number,Foil,Quantity,Scryfall ID,Condition,Language\n' +
+      `Counterspell,xxx,1,normal,2,${printingId},near_mint,en\n` +
+      'BogusCard,zzz,999,normal,1,,near_mint,en';
+
+    const res = await app.inject({ method: 'POST', url: '/v1/inventory/import', headers: authed(), payload: { csv } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.matchedCopies).toBeGreaterThanOrEqual(2);
+    expect(body.unresolved.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('supports richer search: negation excludes matches', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/cards?q=' + encodeURIComponent('t:creature -t:legendary kw:flying') + '&limit=5',
+      headers: authed(),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.total).toBeGreaterThan(0);
+    expect(body.cards.every((c: { typeLine: string }) => !/legendary/i.test(c.typeLine))).toBe(true);
+  });
+
+  it('supports richer search: OR combines clauses', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/cards?q=' + encodeURIComponent('t:goblin or t:angel') + '&limit=5',
+      headers: authed(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().total).toBeGreaterThan(0);
+  });
+
+  it('reports collection value and exports CSV', async () => {
+    const val = await app.inject({ method: 'GET', url: '/v1/inventory/value', headers: authed() });
+    expect(val.statusCode).toBe(200);
+    expect(val.json()).toHaveProperty('totalValueUsd');
+
+    const csv = await app.inject({ method: 'GET', url: '/v1/inventory/export.csv', headers: authed() });
+    expect(csv.statusCode).toBe(200);
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.body).toContain('Scryfall ID');
+  });
 });
 
 describe('parseDecklist', () => {

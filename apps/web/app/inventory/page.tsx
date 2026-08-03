@@ -1,17 +1,22 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
-import type { InventoryItem, InventorySummary } from '@/lib/types';
+import type { InventoryItem, InventorySummary, InventoryValueBreakdown } from '@/lib/types';
 import { AddInventoryForm } from './AddInventoryForm';
+import { ImportInventoryForm } from './ImportInventoryForm';
+import { InventoryRow } from './InventoryRow';
 
 export default async function InventoryPage() {
-  const [listRes, summaryRes] = await Promise.all([
+  const [listRes, summaryRes, valueRes] = await Promise.all([
     apiFetch('/v1/inventory?limit=200'),
     apiFetch('/v1/inventory/summary'),
+    apiFetch('/v1/inventory/value'),
   ]);
   if (listRes.status === 401) redirect('/login');
 
   const { items } = (await listRes.json()) as { items: InventoryItem[] };
   const summary = (await summaryRes.json()) as InventorySummary;
+  const value = (await valueRes.json()) as InventoryValueBreakdown;
 
   return (
     <div className="grid" style={{ gap: 16 }}>
@@ -43,6 +48,55 @@ export default async function InventoryPage() {
       </div>
 
       <div className="panel">
+        <h2>Bulk import (CSV)</h2>
+        <ImportInventoryForm />
+      </div>
+
+      <div className="panel">
+        <div className="row between">
+          <h2 style={{ margin: 0 }}>Collection value</h2>
+          <Link href="/inventory/export" prefetch={false} className="btn secondary">
+            ⬇ Export CSV
+          </Link>
+        </div>
+        <div className="stat" style={{ marginTop: 10 }}>
+          <span className="muted">Total value</span>
+          <b>${value.totalValueUsd.toFixed(2)}</b>
+        </div>
+        {value.topCards.length > 0 && (
+          <>
+            <h3>Top cards by value</h3>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Set</th>
+                  <th>Qty</th>
+                  <th>Unit</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {value.topCards.map((c, i) => (
+                  <tr key={`${c.name}-${c.setCode}-${c.finish}-${i}`}>
+                    <td>{c.name}</td>
+                    <td className="muted">
+                      {c.setCode} #{c.collectorNumber} {c.finish !== 'nonfoil' ? `(${c.finish})` : ''}
+                    </td>
+                    <td>{c.quantity}</td>
+                    <td className="muted">${c.unitUsd.toFixed(2)}</td>
+                    <td>
+                      <b>${c.totalUsd.toFixed(2)}</b>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
+
+      <div className="panel">
         <h2>Items ({items.length})</h2>
         {items.length === 0 ? (
           <p className="muted">Nothing yet. Add cards above.</p>
@@ -54,20 +108,13 @@ export default async function InventoryPage() {
                 <th>Name</th>
                 <th>Set</th>
                 <th>Finish</th>
-                <th>Type</th>
+                <th>Cond.</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {items.map((it) => (
-                <tr key={it.id}>
-                  <td>{it.quantity}×</td>
-                  <td>{it.printing.oracle.name}</td>
-                  <td className="muted">
-                    {it.printing.setCode.toUpperCase()} #{it.printing.collectorNumber}
-                  </td>
-                  <td className="muted">{it.finish}</td>
-                  <td className="muted">{it.printing.oracle.typeLine}</td>
-                </tr>
+                <InventoryRow key={it.id} item={it} />
               ))}
             </tbody>
           </table>

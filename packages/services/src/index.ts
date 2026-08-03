@@ -7,4 +7,5 @@ export * from './deckData.js';
 export * from './decks.js';
 export * from './analysis.js';
 export * from './inventory.js';
+export * from './inventoryImport.js';
 export * from './decklist.js';
