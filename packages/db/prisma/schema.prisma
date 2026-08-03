@@ -1,0 +1,200 @@
+// Prisma schema for the MTG deck-building platform.
+// Card data mirrors Scryfall's split between oracle identity and physical printings.
+
+generator client {
+  provider = "prisma-client-js"
+  // Default output (node_modules/.prisma/client, re-exported by @prisma/client).
+  // Keeping the default means the compiled dist/ resolves the client the same
+  // way source does, with no path relocation headaches.
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Rules identity of a card (one row per Scryfall oracle_id). Deck membership
+/// references this level: "a deck wants Sol Ring", regardless of which printing.
+model OracleCard {
+  oracleId     String  @id @map("oracle_id")
+  name         String
+  manaCost     String? @map("mana_cost")
+  cmc          Float   @default(0)
+  typeLine     String  @map("type_line")
+  oracleText   String? @map("oracle_text")
+  colors       String[] // e.g. ["W","U"]
+  colorIdentity String[] @map("color_identity")
+  keywords     String[]
+  producedMana String[] @map("produced_mana")
+  legalities   Json // { "commander": "legal", "modern": "banned", ... }
+  layout       String  @default("normal")
+  reservedList Boolean @default(false) @map("reserved_list")
+  edhrecRank   Int?    @map("edhrec_rank")
+  cardFaces    Json?   @map("card_faces") // for split/mdfc/transform cards
+
+  printings  CardPrinting[]
+  deckCards  DeckCard[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@index([cmc])
+  @@index([edhrecRank])
+  @@map("oracle_cards")
+}
+
+/// A specific physical printing (one row per Scryfall id). Inventory references
+/// this level, since collectors own specific sets/finishes.
+model CardPrinting {
+  scryfallId      String  @id @map("scryfall_id")
+  oracleId        String  @map("oracle_id")
+  oracle          OracleCard @relation(fields: [oracleId], references: [oracleId], onDelete: Cascade)
+  name            String
+  setCode         String  @map("set_code")
+  setName         String  @map("set_name")
+  collectorNumber String  @map("collector_number")
+  rarity          String
+  finishes        String[] // ["nonfoil","foil","etched"]
+  imageUris       Json?    @map("image_uris")
+  prices          Json? // { "usd": "1.23", "usd_foil": "4.56", "eur": "1.00", ... }
+  lang            String   @default("en")
+  releasedAt      DateTime? @map("released_at")
+
+  inventoryItems InventoryItem[]
+  deckCards      DeckCard[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([oracleId])
+  @@index([setCode])
+  @@map("card_printings")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  handle       String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  apiKeys   ApiKey[]
+  decks     Deck[]
+  inventory InventoryItem[]
+
+  @@map("users")
+}
+
+/// Bearer API key for programmatic + MCP access. Only the hash is stored;
+/// the raw key is shown once at creation. `prefix` is a short display hint.
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  hashedKey  String    @unique @map("hashed_key")
+  prefix     String
+  scopes     String[]  @default([])
+  lastUsedAt DateTime? @map("last_used_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("api_keys")
+}
+
+enum DeckFormat {
+  commander
+  standard
+  modern
+  pioneer
+  pauper
+  legacy
+  vintage
+  brawl
+  historic
+  explorer
+  oathbreaker
+  premodern
+  penny
+  duel
+  oldschool
+  limited
+  casual
+}
+
+enum DeckVisibility {
+  private
+  unlisted
+  public
+}
+
+enum DeckBoard {
+  mainboard
+  sideboard
+  maybeboard
+  command
+}
+
+model Deck {
+  id             String         @id @default(cuid())
+  userId         String         @map("user_id")
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  format         DeckFormat     @default(commander)
+  description    String         @default("")
+  visibility     DeckVisibility @default(private)
+  colorIdentity  String[]       @map("color_identity") // derived from cards
+  commanderOracleId String?     @map("commander_oracle_id")
+
+  cards DeckCard[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("decks")
+}
+
+model DeckCard {
+  id         String    @id @default(cuid())
+  deckId     String    @map("deck_id")
+  deck       Deck      @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  oracleId   String    @map("oracle_id")
+  oracle     OracleCard @relation(fields: [oracleId], references: [oracleId])
+  printingId String?   @map("printing_id") // optional preferred art
+  printing   CardPrinting? @relation(fields: [printingId], references: [scryfallId])
+  quantity   Int       @default(1)
+  board      DeckBoard @default(mainboard)
+  categories String[]  @default([]) // user tags: "Ramp","Removal",...
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // One row per (deck, card, board) — quantity captures multiples.
+  @@unique([deckId, oracleId, board])
+  @@index([deckId])
+  @@map("deck_cards")
+}
+
+model InventoryItem {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  printingId String   @map("printing_id")
+  printing   CardPrinting @relation(fields: [printingId], references: [scryfallId])
+  quantity   Int      @default(1)
+  finish     String   @default("nonfoil") // nonfoil | foil | etched
+  condition  String   @default("NM") // NM, LP, MP, HP, DMG
+  language   String   @default("en")
+  tags       String[] @default([])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, printingId, finish, condition, language])
+  @@index([userId])
+  @@map("inventory_items")
+}

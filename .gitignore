@@ -1,0 +1,30 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+.next/
+out/
+*.tsbuildinfo
+
+# turbo
+.turbo/
+
+# env
+.env
+.env.*
+!.env.example
+
+# scryfall bulk cache (large)
+.cache/
+data/
+**/data/scryfall/
+
+# prisma
+packages/db/prisma/*.db
+
+# logs / os
+*.log
+.DS_Store
+coverage/

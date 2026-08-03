@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: deckbuilding-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: deck
+      POSTGRES_PASSWORD: deck
+      POSTGRES_DB: deckbuilding
+    ports:
+      - "5432:5432"
+    volumes:
+      - deckbuilding_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deck -d deckbuilding"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  deckbuilding_pgdata:
