@@ -1,4 +1,10 @@
-import { parseQuery, type CardClause, type CardQuery, type NumericConstraint } from '@deck/core';
+import {
+  parseQuery,
+  type CardClause,
+  type CardQuery,
+  type ColorConstraint,
+  type NumericConstraint,
+} from '@deck/core';
 import type { OracleCard, Prisma, PrismaClient } from '@deck/db';
 import { ServiceError } from './errors.js';
 
@@ -9,6 +15,27 @@ function numericWhere(constraints: NumericConstraint[], field: 'cmc' | 'powerNum
     const op = c.op === '=' ? 'equals' : c.op === '>' ? 'gt' : c.op === '<' ? 'lt' : c.op === '>=' ? 'gte' : 'lte';
     return { [field]: { [op]: c.value } } as Prisma.OracleCardWhereInput;
   });
+}
+
+/**
+ * Translate a color/identity comparison into Prisma array predicates on `field`.
+ * Q = query colors, complement = the other colors. subset = no colors outside Q;
+ * superset = has all of Q; proper variants add a not-equal condition.
+ */
+function colorWhere(field: 'colors' | 'colorIdentity', c: ColorConstraint): Prisma.OracleCardWhereInput[] {
+  const Q = c.values;
+  const complement = ALL_COLORS.filter((x) => !Q.includes(x));
+  const hasAll = { [field]: { hasEvery: Q } } as Prisma.OracleCardWhereInput;
+  const noneOutside = complement.length
+    ? [{ NOT: { [field]: { hasSome: complement } } } as Prisma.OracleCardWhereInput]
+    : [];
+  switch (c.op) {
+    case '<=': return noneOutside; // subset
+    case '>=': return [hasAll]; // superset
+    case '=': return [hasAll, ...noneOutside]; // exact
+    case '<': return [...noneOutside, { NOT: hasAll }]; // proper subset
+    case '>': return [hasAll, { [field]: { hasSome: complement } } as Prisma.OracleCardWhereInput]; // proper superset
+  }
 }
 
 /** Translate a single AND-clause into a Prisma where over OracleCard. */
@@ -34,22 +61,11 @@ function clauseToWhere(clause: CardClause): Prisma.OracleCardWhereInput {
   and.push(...numericWhere(clause.power, 'powerNum'));
   and.push(...numericWhere(clause.toughness, 'toughnessNum'));
 
-  if (clause.colors) {
-    if (clause.colors.mode === 'contains') {
-      and.push({ colors: { hasEvery: clause.colors.values } });
-    } else {
-      const complement = ALL_COLORS.filter((c) => !clause.colors!.values.includes(c));
-      and.push({ colors: { hasEvery: clause.colors.values } });
-      if (complement.length) and.push({ NOT: { colors: { hasSome: complement } } });
-    }
-  }
+  if (clause.colors) and.push(...colorWhere('colors', clause.colors));
   if (clause.colorsExcluded.length) {
     and.push({ NOT: { colors: { hasSome: clause.colorsExcluded } } });
   }
-  if (clause.colorIdentityWithin) {
-    const complement = ALL_COLORS.filter((c) => !clause.colorIdentityWithin!.includes(c));
-    if (complement.length) and.push({ NOT: { colorIdentity: { hasSome: complement } } });
-  }
+  if (clause.colorIdentity) and.push(...colorWhere('colorIdentity', clause.colorIdentity));
   if (clause.legalIn) {
     and.push({
       OR: [

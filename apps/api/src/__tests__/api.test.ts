@@ -247,8 +247,30 @@ describe('API integration', () => {
     await setDeckCardQuantity(prisma, deckId, userId, { name: 'Shock' }, 0);
     expect(findShock(await deckCards())).toBeUndefined();
 
+    // upsert: setting a quantity on a card not in the deck adds it
+    await setDeckCardQuantity(prisma, deckId, userId, { name: 'Goblin Guide', board: 'mainboard' }, 2);
+    expect((await deckCards()).find((c) => c.oracle.name === 'Goblin Guide')?.quantity).toBe(2);
+    await removeDeckCardBySelector(prisma, deckId, userId, { name: 'Goblin Guide' });
+
     // unknown card is a clear error
     await expect(setDeckCardQuantity(prisma, deckId, userId, { name: 'NotARealCard_zzz' }, 2)).rejects.toThrow();
+  });
+
+  it('supports color-identity comparison operators (id<=)', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/cards?q=' + encodeURIComponent('id<=wb t:creature') + '&limit=10',
+      headers: authed(),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.total).toBeGreaterThan(0);
+    // every result's identity must be within {W,B}
+    expect(
+      body.cards.every((c: { colorIdentity: string[] }) =>
+        c.colorIdentity.every((x) => x === 'W' || x === 'B'),
+      ),
+    ).toBe(true);
   });
 
   it('lists inventory with a total, pagination, and value sort', async () => {

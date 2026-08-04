@@ -254,7 +254,11 @@ export async function resolveDeckCardId(
   return (preferred ?? matches[0]!).id;
 }
 
-/** Set a deck card's exact quantity (0 removes it), selecting by id/oracle/name. */
+/**
+ * Set a deck card's exact quantity, selecting by id/oracle/name.
+ * Upserts: if the card isn't in the deck yet and quantity >= 1, it is added
+ * (so this tool works for swaps). Quantity 0 removes it (or is a no-op if absent).
+ */
 export async function setDeckCardQuantity(
   prisma: PrismaClient,
   deckId: string,
@@ -263,8 +267,25 @@ export async function setDeckCardQuantity(
   quantity: number,
 ) {
   const cardId = await resolveDeckCardId(prisma, deckId, selector);
-  if (!cardId) throw new ServiceError('not_found', 'That card is not in this deck.');
-  return updateDeckCard(prisma, deckId, userId, cardId, { quantity });
+  if (cardId) {
+    return updateDeckCard(prisma, deckId, userId, cardId, { quantity }); // 0 removes
+  }
+
+  // Not in the deck.
+  await assertOwnedDeck(prisma, deckId, userId);
+  if (quantity <= 0) return { action: 'noop', message: 'Card is not in the deck.' };
+  if (!selector.name && !selector.oracleId) {
+    throw new ServiceError('not_found', 'That card is not in this deck (provide a name or oracleId to add it).');
+  }
+
+  const board = (selector.board ?? 'mainboard') as Board;
+  const result = await addCardsToDeck(prisma, deckId, userId, [
+    { name: selector.name, oracleId: selector.oracleId, quantity, board },
+  ]);
+  if (result.added === 0) {
+    throw new ServiceError('not_found', `Could not resolve a card to add for "${selector.name ?? selector.oracleId}".`);
+  }
+  return { action: 'added', quantity, board };
 }
 
 /** Remove a deck card, selecting by id/oracle/name. */

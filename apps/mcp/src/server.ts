@@ -196,7 +196,7 @@ async function main() {
     {
       title: 'Set a deck card quantity',
       description:
-        'Set the exact quantity of a card in a deck (0 removes it). Identify the card by name, oracleId, or cardId; pass board when the card exists on more than one board. Use this for swaps and trimming — add_cards_to_deck only increments.',
+        'Set the exact quantity of a card in a deck. Upserts: adds the card if it is not already in the deck (quantity >= 1), and 0 removes it. Identify the card by name, oracleId, or cardId; pass board when the card exists on more than one board. Use this for swaps and trimming — add_cards_to_deck only increments existing counts.',
       inputSchema: {
         deckId: z.string(),
         quantity: z.number().int().min(0),

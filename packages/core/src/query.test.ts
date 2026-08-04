@@ -7,17 +7,25 @@ describe('parseQuery', () => {
     const q = parseQuery('c:r t:instant cmc<=1 f:modern bolt');
     expect(q.or).toHaveLength(1);
     const f = q.or[0]!;
-    expect(f.colors).toEqual({ mode: 'contains', values: ['R'] });
+    expect(f.colors).toEqual({ op: '>=', values: ['R'] }); // c: means "contains"
     expect(f.typeIncludes).toEqual(['instant']);
     expect(f.cmc).toEqual([{ op: '<=', value: 1 }]);
     expect(f.legalIn).toBe('modern');
     expect(f.nameIncludes).toEqual(['bolt']);
   });
 
-  it('parses identity and quoted phrases', () => {
+  it('parses identity (defaults to subset) and quoted phrases', () => {
     const q = parseQuery('id:wu "mob boss"');
-    expect(q.or[0]!.colorIdentityWithin).toEqual(['W', 'U']);
+    expect(q.or[0]!.colorIdentity).toEqual({ op: '<=', values: ['W', 'U'] });
     expect(q.or[0]!.nameIncludes).toEqual(['mob boss']);
+  });
+
+  it('parses color/identity comparison operators', () => {
+    expect(parseQuery('id<=wb').or[0]!.colorIdentity).toEqual({ op: '<=', values: ['W', 'B'] });
+    expect(parseQuery('id>=w').or[0]!.colorIdentity).toEqual({ op: '>=', values: ['W'] });
+    expect(parseQuery('id=wu').or[0]!.colorIdentity).toEqual({ op: '=', values: ['W', 'U'] });
+    expect(parseQuery('c<=wu').or[0]!.colors).toEqual({ op: '<=', values: ['W', 'U'] });
+    expect(parseQuery('c!r').or[0]!.colors).toEqual({ op: '=', values: ['R'] });
   });
 
   it('supports negation, keywords, and power/toughness', () => {
@@ -84,5 +92,24 @@ describe('cardMatchesQuery', () => {
     expect(cardMatchesQuery(CARDS.solRing, parseQuery('f:modern'))).toBe(false); // banned
     expect(cardMatchesQuery(CARDS.lightningBolt, parseQuery('id:r'))).toBe(true);
     expect(cardMatchesQuery(CARDS.counterspell, parseQuery('id:r'))).toBe(false);
+  });
+
+  it('evaluates identity comparison operators', () => {
+    // id<=wb : identity within {W,B}
+    const within = parseQuery('id<=wb');
+    expect(cardMatchesQuery(CARDS.serraAngel, within)).toBe(true); // [W]
+    expect(cardMatchesQuery(CARDS.solRing, within)).toBe(true); // colorless
+    expect(cardMatchesQuery(CARDS.lightningBolt, within)).toBe(false); // [R]
+
+    // id>=r : identity contains at least R
+    const withR = parseQuery('id>=r');
+    expect(cardMatchesQuery(CARDS.krenko, withR)).toBe(true); // [R]
+    expect(cardMatchesQuery(CARDS.counterspell, withR)).toBe(false); // [U]
+
+    // c<=wu : colors are a subset of {W,U}
+    const colorsWU = parseQuery('c<=wu');
+    expect(cardMatchesQuery(CARDS.counterspell, colorsWU)).toBe(true); // [U]
+    expect(cardMatchesQuery(CARDS.solRing, colorsWU)).toBe(true); // colorless
+    expect(cardMatchesQuery(CARDS.lightningBolt, colorsWU)).toBe(false); // [R]
   });
 });

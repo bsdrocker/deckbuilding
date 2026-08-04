@@ -8,6 +8,16 @@ export interface NumericConstraint {
 }
 
 /**
+ * A color / color-identity comparison (Scryfall style). `op` compares the card's
+ * color set S against the query set Q:
+ *   '<=' S ⊆ Q · '>=' S ⊇ Q · '=' S = Q · '<' proper subset · '>' proper superset
+ */
+export interface ColorConstraint {
+  op: NumericOp;
+  values: Color[];
+}
+
+/**
  * One AND-clause of a card query. A {@link CardQuery} is an OR of clauses.
  * `*Excludes`/`*Excluded` fields are negations (`-t:creature`).
  */
@@ -20,9 +30,9 @@ export interface CardClause {
   oracleExcludes: string[];
   keywords: string[];
   keywordsExcluded: string[];
-  colors?: { mode: 'contains' | 'exact'; values: Color[] };
+  colors?: ColorConstraint;
   colorsExcluded: Color[];
-  colorIdentityWithin?: Color[];
+  colorIdentity?: ColorConstraint;
   cmc: NumericConstraint[];
   power: NumericConstraint[];
   toughness: NumericConstraint[];
@@ -92,6 +102,15 @@ function unquote(s: string): string {
 }
 
 const NUMERIC_KEYS = /^(cmc|mv|pow|power|tou|toughness)(>=|<=|=|>|<|:)/i;
+// Color / identity keys accept comparison operators (Scryfall style): id<=wb, c>=r.
+const COLOR_KEYS = /^(identity|colors?|ci|id|c)(<=|>=|=|<|>|:|!)/i;
+
+/** Map a raw color operator to a comparison. `:` defaults differ by key. */
+function colorOp(raw: string, isIdentity: boolean): NumericOp {
+  if (raw === ':') return isIdentity ? '<=' : '>='; // id: is subset, c: is contains
+  if (raw === '!') return '=';
+  return raw as NumericOp;
+}
 
 function applyToken(clause: CardClause, rawToken: string): void {
   let token = rawToken;
@@ -115,24 +134,27 @@ function applyToken(clause: CardClause, rawToken: string): void {
     return;
   }
 
+  const colorMatch = token.match(COLOR_KEYS);
+  if (colorMatch) {
+    const key = colorMatch[1]!.toLowerCase();
+    const rawOp = colorMatch[2]!;
+    const values = parseColors(unquote(token.slice(colorMatch[1]!.length + rawOp.length)));
+    const isIdentity = key === 'id' || key === 'identity' || key === 'ci';
+    if (!isIdentity && negate) {
+      clause.colorsExcluded.push(...values); // -c:r => not red
+      return;
+    }
+    const constraint: ColorConstraint = { op: colorOp(rawOp, isIdentity), values };
+    if (isIdentity) clause.colorIdentity = constraint;
+    else clause.colors = constraint;
+    return;
+  }
+
   const colon = token.indexOf(':');
   if (colon > 0) {
     const key = token.slice(0, colon).toLowerCase();
     const value = unquote(token.slice(colon + 1));
     switch (key) {
-      case 'c':
-      case 'color':
-      case 'colors':
-        if (negate) clause.colorsExcluded.push(...parseColors(value));
-        else clause.colors = { mode: 'contains', values: parseColors(value) };
-        return;
-      case 'c!':
-        clause.colors = { mode: 'exact', values: parseColors(value) };
-        return;
-      case 'id':
-      case 'identity':
-        clause.colorIdentityWithin = parseColors(value);
-        return;
       case 't':
       case 'type':
         (negate ? clause.typeExcludes : clause.typeIncludes).push(value.toLowerCase());
@@ -198,7 +220,7 @@ function isEmptyClause(c: CardClause): boolean {
     c.typeIncludes.length === 0 && c.typeExcludes.length === 0 &&
     c.oracleIncludes.length === 0 && c.oracleExcludes.length === 0 &&
     c.keywords.length === 0 && c.keywordsExcluded.length === 0 &&
-    c.colorsExcluded.length === 0 && !c.colors && !c.colorIdentityWithin &&
+    c.colorsExcluded.length === 0 && !c.colors && !c.colorIdentity &&
     c.cmc.length === 0 && c.power.length === 0 && c.toughness.length === 0 &&
     c.rarity.length === 0 && !c.legalIn
   );
@@ -218,6 +240,21 @@ function parseStat(raw: string | null | undefined): number | null {
   if (raw == null) return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
+}
+
+/** Evaluate a color/identity comparison of the card's set against the query set. */
+function colorConstraintMatches(cardColors: string[], c: ColorConstraint): boolean {
+  const S = new Set(cardColors);
+  const Q = new Set<string>(c.values);
+  const subset = [...S].every((x) => Q.has(x)); // S ⊆ Q
+  const superset = [...Q].every((x) => S.has(x)); // S ⊇ Q
+  switch (c.op) {
+    case '<=': return subset;
+    case '>=': return superset;
+    case '=': return subset && superset;
+    case '<': return subset && !superset;
+    case '>': return superset && !subset;
+  }
 }
 
 function clauseMatches(card: CardData, clause: CardClause): boolean {
@@ -241,21 +278,13 @@ function clauseMatches(card: CardData, clause: CardClause): boolean {
   const tou = parseStat(card.toughness);
   if (clause.toughness.length && (tou === null || !clause.toughness.every((c) => numMatches(tou, c)))) return false;
 
-  if (clause.colors) {
-    const set = new Set(card.colors);
-    if (clause.colors.mode === 'contains') {
-      if (!clause.colors.values.every((c) => set.has(c))) return false;
-    } else if (set.size !== clause.colors.values.length || !clause.colors.values.every((c) => set.has(c))) {
-      return false;
-    }
-  }
+  if (clause.colors && !colorConstraintMatches(card.colors, clause.colors)) return false;
   if (clause.colorsExcluded.length) {
     const set = new Set(card.colors);
     if (clause.colorsExcluded.some((c) => set.has(c))) return false;
   }
-  if (clause.colorIdentityWithin) {
-    const allowed = new Set(clause.colorIdentityWithin);
-    if (!card.colorIdentity.every((c) => allowed.has(c as Color))) return false;
+  if (clause.colorIdentity && !colorConstraintMatches(card.colorIdentity, clause.colorIdentity)) {
+    return false;
   }
   if (clause.legalIn) {
     const l = card.legalities[clause.legalIn];

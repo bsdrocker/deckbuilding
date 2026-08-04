@@ -13,7 +13,7 @@ favor cards you **already own**.
 | `get_card` | Look up a card by name (exact then fuzzy) with recent printings. |
 | `list_decks` / `get_deck` | List/read your decks. |
 | `create_deck` / `add_cards_to_deck` / `import_deck` | Build and populate decks. |
-| `set_card_quantity` / `remove_card_from_deck` | Edit a deck in place — set exact quantity (0 removes) or remove, by name/oracleId. |
+| `set_card_quantity` / `remove_card_from_deck` | Edit a deck in place — set exact quantity (upserts; 0 removes) or remove, by name/oracleId. |
 | `analyze_deck` | Mana curve, color pips, type split, price, and format legality. |
 | `get_inventory` / `add_inventory` | Read/add your card collection. |
 | `import_inventory_csv` | Bulk-import a ManaBox/Moxfield/Deckbox collection CSV. |
