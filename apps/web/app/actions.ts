@@ -213,7 +213,7 @@ export async function addInventoryDetailedAction(input: {
 
 export async function updateInventoryAction(
   id: string,
-  patch: { quantity?: number; finish?: string; condition?: string; language?: string },
+  patch: { quantity?: number; finish?: string; condition?: string; language?: string; printingId?: string },
 ): Promise<{ error?: string; ok?: boolean }> {
   const res = await apiFetch(`/v1/inventory/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
   if (!res.ok) {

@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { CardHover } from '@/components/CardHover';
+import { PrintingPickerModal } from '@/components/PrintingPickerModal';
 import type { InventoryItem } from '@/lib/types';
 import { deleteInventoryAction, updateInventoryAction } from '../actions';
 
@@ -13,6 +14,7 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [pickingPrint, setPickingPrint] = useState(false);
 
   function run(fn: () => Promise<{ error?: string }>) {
     setError(null);
@@ -39,8 +41,24 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
       <td>
         <CardHover name={item.printing.oracle.name} imageUrl={item.printing.imageUris?.normal} />
       </td>
-      <td className="muted">
-        {item.printing.setCode.toUpperCase()} #{item.printing.collectorNumber}
+      <td>
+        <button type="button" className="linklike" title="Change printing" onClick={() => setPickingPrint(true)}>
+          {item.printing.setCode.toUpperCase()} #{item.printing.collectorNumber}
+        </button>
+        {pickingPrint && (
+          <PrintingPickerModal
+            oracleId={item.printing.oracleId}
+            currentPrintingId={item.printing.scryfallId}
+            cardName={item.printing.oracle.name}
+            onClose={() => setPickingPrint(false)}
+            onSelect={(printingId) => {
+              setPickingPrint(false);
+              if (printingId && printingId !== item.printing.scryfallId) {
+                run(() => updateInventoryAction(item.id, { printingId }));
+              }
+            }}
+          />
+        )}
       </td>
       <td>
         <select className="board-select" value={item.finish} onChange={(e) => run(() => updateInventoryAction(item.id, { finish: e.target.value }))} disabled={pending}>
@@ -60,6 +78,7 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
           ))}
         </select>
       </td>
+      <td className="muted">${item.totalUsd.toFixed(2)}</td>
       <td>
         <button type="button" className="remove-btn" title="Remove" onClick={() => run(() => deleteInventoryAction(item.id))} disabled={pending}>
           ×

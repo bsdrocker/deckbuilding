@@ -25,12 +25,14 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
         summary: 'List your inventory items.',
         security: [{ bearerAuth: [] }],
         querystring: z.object({
-          limit: z.coerce.number().int().min(1).max(500).default(100),
+          limit: z.coerce.number().int().min(1).max(200).default(50),
           offset: z.coerce.number().int().min(0).default(0),
+          sort: z.enum(['name', 'set', 'value', 'recent']).default('name'),
+          dir: z.enum(['asc', 'desc']).default('asc'),
         }),
       },
     },
-    async (req) => ({ items: await listInventory(app.prisma, req.user!.id, req.query) }),
+    async (req) => listInventory(app.prisma, req.user!.id, req.query),
   );
 
   r.get(
@@ -126,6 +128,7 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
           finish: z.string().optional(),
           condition: z.string().optional(),
           language: z.string().optional(),
+          printingId: z.string().optional(),
         }),
       },
     },

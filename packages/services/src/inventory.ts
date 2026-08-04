@@ -31,18 +31,94 @@ export interface AddInventoryInput {
   tags?: string[];
 }
 
+const INVENTORY_INCLUDE = {
+  printing: {
+    select: {
+      scryfallId: true,
+      setCode: true,
+      setName: true,
+      collectorNumber: true,
+      prices: true,
+      imageUris: true,
+      oracleId: true,
+      oracle: { select: { name: true, typeLine: true } },
+    },
+  },
+} as const;
+
+export type InventorySort = 'name' | 'set' | 'value' | 'recent';
+export type SortDir = 'asc' | 'desc';
+
+export interface ListInventoryOptions {
+  limit?: number;
+  offset?: number;
+  sort?: InventorySort;
+  dir?: SortDir;
+}
+
+export interface InventoryListResult {
+  total: number;
+  items: Array<
+    Awaited<ReturnType<typeof loadInventoryPage>>['items'][number] & { unitUsd: number; totalUsd: number }
+  >;
+}
+
+async function loadInventoryPage(
+  prisma: PrismaClient,
+  userId: string,
+  orderBy: unknown,
+  take: number,
+  skip: number,
+) {
+  const items = await prisma.inventoryItem.findMany({
+    where: { userId },
+    include: INVENTORY_INCLUDE,
+    orderBy: orderBy as never,
+    take,
+    skip,
+  });
+  return { items };
+}
+
+function withValue<T extends { quantity: number; finish: string; printing: { prices: unknown } }>(item: T) {
+  const unit = finishPrice(item.printing.prices, item.finish) ?? 0;
+  return { ...item, unitUsd: Math.round(unit * 100) / 100, totalUsd: Math.round(unit * item.quantity * 100) / 100 };
+}
+
+/**
+ * Paginated, sortable inventory listing. Sorting by name/set/recency is done in
+ * the database; value sorting is finish-aware (not a DB column) so it loads the
+ * user's rows and sorts in memory before paging.
+ */
 export async function listInventory(
   prisma: PrismaClient,
   userId: string,
-  opts: { limit?: number; offset?: number } = {},
-) {
-  return prisma.inventoryItem.findMany({
-    where: { userId },
-    include: { printing: { include: { oracle: { select: { name: true, typeLine: true } } } } },
-    orderBy: { updatedAt: 'desc' },
-    take: Math.min(opts.limit ?? 100, 500),
-    skip: opts.offset ?? 0,
-  });
+  opts: ListInventoryOptions = {},
+): Promise<InventoryListResult> {
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+  const offset = Math.max(opts.offset ?? 0, 0);
+  const dir: SortDir = opts.dir === 'desc' ? 'desc' : 'asc';
+  const sort = opts.sort ?? 'name';
+
+  const total = await prisma.inventoryItem.count({ where: { userId } });
+
+  if (sort === 'value') {
+    // Finish-aware value isn't a column — compute over all rows, sort, then page.
+    const all = await prisma.inventoryItem.findMany({ where: { userId }, include: INVENTORY_INCLUDE });
+    const valued = all.map(withValue);
+    valued.sort((a, b) => (dir === 'desc' ? b.totalUsd - a.totalUsd : a.totalUsd - b.totalUsd));
+    return { total, items: valued.slice(offset, offset + limit) };
+  }
+
+  const orderBy =
+    sort === 'set'
+      ? [{ printing: { setCode: dir } }, { printing: { collectorNumber: dir } }]
+      : sort === 'recent'
+        ? [{ updatedAt: dir }]
+        : [{ printing: { oracle: { name: dir } } }];
+
+  const { items } = await loadInventoryPage(prisma, userId, orderBy, limit, offset);
+  return { total, items: items.map(withValue) };
 }
 
 export async function addInventory(
@@ -77,7 +153,7 @@ export async function updateInventoryItem(
   prisma: PrismaClient,
   userId: string,
   id: string,
-  patch: { quantity?: number; tags?: string[]; finish?: string; condition?: string; language?: string },
+  patch: { quantity?: number; tags?: string[]; finish?: string; condition?: string; language?: string; printingId?: string },
 ) {
   const item = await prisma.inventoryItem.findUnique({ where: { id } });
   if (!item || item.userId !== userId) throw new ServiceError('not_found', 'Inventory item not found.');
@@ -86,24 +162,28 @@ export async function updateInventoryItem(
     return null;
   }
 
+  const printingId = patch.printingId ?? item.printingId;
   const finish = patch.finish ?? item.finish;
   const condition = patch.condition ?? item.condition;
   const language = patch.language ?? item.language;
   const quantity = patch.quantity ?? item.quantity;
-  const changesKey = finish !== item.finish || condition !== item.condition || language !== item.language;
+  const changesKey =
+    printingId !== item.printingId ||
+    finish !== item.finish ||
+    condition !== item.condition ||
+    language !== item.language;
 
-  // If finish/condition/language changed into a combo that already exists,
-  // merge quantities into that row and delete this one (unique key would collide).
+  if (patch.printingId && patch.printingId !== item.printingId) {
+    const printing = await prisma.cardPrinting.findUnique({ where: { scryfallId: patch.printingId } });
+    if (!printing) throw new ServiceError('not_found', `No printing with id ${patch.printingId}`);
+  }
+
+  // If the unique key (printing/finish/condition/language) changed into a combo
+  // that already exists, merge quantities into that row and delete this one.
   if (changesKey) {
     const conflict = await prisma.inventoryItem.findUnique({
       where: {
-        userId_printingId_finish_condition_language: {
-          userId,
-          printingId: item.printingId,
-          finish,
-          condition,
-          language,
-        },
+        userId_printingId_finish_condition_language: { userId, printingId, finish, condition, language },
       },
     });
     if (conflict && conflict.id !== id) {
@@ -120,7 +200,7 @@ export async function updateInventoryItem(
 
   return prisma.inventoryItem.update({
     where: { id },
-    data: { quantity, tags: patch.tags, finish, condition, language },
+    data: { quantity, tags: patch.tags, finish, condition, language, printingId },
   });
 }
 

@@ -152,7 +152,13 @@ describe('API integration', () => {
     expect(patch.statusCode).toBe(200);
     expect(patch.json().quantity).toBe(3);
 
-    const del = await app.inject({ method: 'DELETE', url: `/v1/decks/${deckId}/cards/${bolt.id}`, headers: authed() });
+    // Reproduce the real web client: DELETE carrying a JSON content-type but no
+    // body must not fail with FST_ERR_CTP_EMPTY_JSON_BODY.
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/v1/decks/${deckId}/cards/${bolt.id}`,
+      headers: { ...authed(), 'content-type': 'application/json' },
+    });
     expect(del.statusCode).toBe(204);
 
     const after = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
@@ -208,6 +214,48 @@ describe('API integration', () => {
     expect(csv.statusCode).toBe(200);
     expect(csv.headers['content-type']).toContain('text/csv');
     expect(csv.body).toContain('Scryfall ID');
+  });
+
+  it('lists inventory with a total, pagination, and value sort', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/inventory?sort=value&dir=desc&limit=1&offset=0',
+      headers: authed(),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.total).toBeGreaterThanOrEqual(2);
+    expect(body.items.length).toBe(1); // paged
+    expect(body.items[0]).toHaveProperty('totalUsd');
+  });
+
+  it('changes an inventory item printing (and validates it)', async () => {
+    const list = (await app.inject({ method: 'GET', url: '/v1/inventory?limit=200', headers: authed() })).json();
+    const sol = list.items.find((i: { printing: { oracle: { name: string } } }) => i.printing.oracle.name === 'Sol Ring');
+    expect(sol).toBeDefined();
+
+    // Only meaningful when the DB has multiple printings per card (default_cards).
+    const other = await prisma.cardPrinting.findFirst({
+      where: { oracleId: sol.printing.oracleId, NOT: { scryfallId: sol.printing.scryfallId } },
+    });
+    if (other) {
+      const ok = await app.inject({
+        method: 'PATCH',
+        url: `/v1/inventory/${sol.id}`,
+        headers: authed(),
+        payload: { printingId: other.scryfallId },
+      });
+      expect(ok.statusCode).toBe(200);
+      expect(ok.json().printingId).toBe(other.scryfallId);
+    }
+
+    const bad = await app.inject({
+      method: 'PATCH',
+      url: `/v1/inventory/${sol.id}`,
+      headers: authed(),
+      payload: { printingId: 'does-not-exist' },
+    });
+    expect(bad.statusCode).toBe(404);
   });
 });
 
