@@ -127,6 +127,44 @@ button.secondary, .btn.secondary { background: var(--panel-2); color: var(--text
 .completion { height: 12px; background: var(--panel-2); border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
 .completion > div { height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
 
+/* pagination */
+.pagination { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.page-btn {
+  min-width: 32px; height: 32px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); color: var(--text);
+  font-size: 13px; text-decoration: none; font-variant-numeric: tabular-nums;
+}
+.page-btn:hover { background: var(--border); text-decoration: none; }
+.page-btn.current { background: var(--accent); color: #0b1020; border-color: var(--accent); font-weight: 700; }
+.page-btn.disabled { opacity: 0.35; pointer-events: none; }
+.page-gap { padding: 0 4px; color: var(--muted); }
+
+/* modal + printing picker */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.66); z-index: 100;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.modal {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  padding: 18px; width: min(880px, 100%); max-height: 82vh; overflow: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+.printing-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;
+}
+.printing-option {
+  background: var(--panel-2); border: 2px solid var(--border); border-radius: 12px;
+  padding: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.printing-option:hover { border-color: var(--accent); filter: none; }
+.printing-option.selected { border-color: var(--accent-2); box-shadow: 0 0 0 2px rgba(126,224,129,0.25); }
+.printing-thumb { width: 100%; border-radius: 8px; aspect-ratio: 63/88; object-fit: cover; }
+.printing-thumb.placeholder {
+  display: flex; align-items: center; justify-content: center; color: var(--muted);
+  background: var(--panel); border: 1px dashed var(--border); font-size: 12px; text-align: center;
+}
+.printing-label { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
 .stat { display: flex; justify-content: space-between; padding: 3px 0; }
 .stat b { font-variant-numeric: tabular-nums; }
 

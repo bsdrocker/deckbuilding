@@ -106,10 +106,19 @@ export async function searchCards(
   return { total, cards };
 }
 
+// All printings for a card, newest first — used by the printing/art pickers,
+// which need every printing (some cards have 100+), not a small recent slice.
+const ALL_PRINTINGS: Prisma.OracleCardInclude = {
+  printings: {
+    orderBy: [{ releasedAt: 'desc' }, { collectorNumber: 'asc' }],
+    take: 500,
+  },
+};
+
 export async function getCardById(prisma: PrismaClient, oracleId: string) {
   const card = await prisma.oracleCard.findUnique({
     where: { oracleId },
-    include: { printings: { orderBy: { releasedAt: 'desc' }, take: 25 } },
+    include: ALL_PRINTINGS,
   });
   if (!card) throw new ServiceError('not_found', `No card with oracle id ${oracleId}`);
   return card;
@@ -119,14 +128,14 @@ export async function getCardById(prisma: PrismaClient, oracleId: string) {
 export async function getCardByName(prisma: PrismaClient, name: string) {
   const exact = await prisma.oracleCard.findFirst({
     where: { name: { equals: name, mode: 'insensitive' } },
-    include: { printings: { orderBy: { releasedAt: 'desc' }, take: 25 } },
+    include: ALL_PRINTINGS,
   });
   if (exact) return exact;
 
   const fuzzy = await prisma.oracleCard.findFirst({
     where: { name: { contains: name, mode: 'insensitive' } },
     orderBy: { edhrecRank: 'asc' },
-    include: { printings: { orderBy: { releasedAt: 'desc' }, take: 25 } },
+    include: ALL_PRINTINGS,
   });
   if (!fuzzy) throw new ServiceError('not_found', `No card matching name "${name}"`);
   return fuzzy;

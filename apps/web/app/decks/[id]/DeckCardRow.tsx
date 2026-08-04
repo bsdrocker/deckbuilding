@@ -3,13 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { CardHover } from '@/components/CardHover';
+import { PrintingPickerModal } from '@/components/PrintingPickerModal';
 import type { DeckCard } from '@/lib/types';
-import {
-  findPrintingsForOracleAction,
-  removeDeckCardAction,
-  updateDeckCardAction,
-  type PrintingOption,
-} from '../../actions';
+import { removeDeckCardAction, updateDeckCardAction } from '../../actions';
 
 const BOARDS = [
   { value: 'mainboard', label: 'Main' },
@@ -22,8 +18,7 @@ export function DeckCardRow({ deckId, card }: { deckId: string; card: DeckCard }
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [showArt, setShowArt] = useState(false);
-  const [printings, setPrintings] = useState<PrintingOption[] | null>(null);
+  const [pickingArt, setPickingArt] = useState(false);
 
   function run(fn: () => Promise<{ error?: string }>) {
     setError(null);
@@ -40,17 +35,6 @@ export function DeckCardRow({ deckId, card }: { deckId: string; card: DeckCard }
   };
 
   const imageUrl = card.printing?.imageUris?.normal ?? card.oracle.imageUris?.normal ?? null;
-
-  function toggleArt() {
-    const next = !showArt;
-    setShowArt(next);
-    if (next && printings === null) {
-      startTransition(async () => {
-        const res = await findPrintingsForOracleAction(card.oracleId);
-        setPrintings(res.printings ?? []);
-      });
-    }
-  }
 
   return (
     <li className="deck-card-row" style={{ opacity: pending ? 0.5 : 1 }}>
@@ -88,7 +72,7 @@ export function DeckCardRow({ deckId, card }: { deckId: string; card: DeckCard }
           className="art-btn"
           title="Choose printing (art)"
           aria-label="Choose printing"
-          onClick={toggleArt}
+          onClick={() => setPickingArt(true)}
           disabled={pending}
         >
           🎨
@@ -118,29 +102,20 @@ export function DeckCardRow({ deckId, card }: { deckId: string; card: DeckCard }
         </button>
       </span>
 
-      {showArt && (
-        <span className="row" style={{ flexBasis: '100%', gap: 8, marginTop: 4 }}>
-          {printings === null ? (
-            <span className="muted">Loading printings…</span>
-          ) : (
-            <select
-              className="board-select"
-              style={{ flex: 1 }}
-              value={card.printingId ?? ''}
-              onChange={(e) =>
-                run(() => updateDeckCardAction(deckId, card.id, { printingId: e.target.value || null }))
-              }
-              disabled={pending}
-            >
-              <option value="">Default printing</option>
-              {printings.map((p) => (
-                <option key={p.scryfallId} value={p.scryfallId}>
-                  {p.setName} · #{p.collectorNumber} · {p.rarity}
-                </option>
-              ))}
-            </select>
-          )}
-        </span>
+      {pickingArt && (
+        <PrintingPickerModal
+          oracleId={card.oracleId}
+          currentPrintingId={card.printingId}
+          cardName={card.oracle.name}
+          allowDefault
+          onClose={() => setPickingArt(false)}
+          onSelect={(printingId) => {
+            setPickingArt(false);
+            if (printingId !== card.printingId) {
+              run(() => updateDeckCardAction(deckId, card.id, { printingId }));
+            }
+          }}
+        />
       )}
       {error && <span className="error" style={{ flexBasis: '100%' }}>{error}</span>}
     </li>

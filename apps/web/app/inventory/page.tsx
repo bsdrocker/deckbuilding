@@ -6,6 +6,7 @@ import type {
   InventorySummary,
   InventoryValueBreakdown,
 } from '@/lib/types';
+import { Pagination } from '@/components/Pagination';
 import { AddInventoryForm } from './AddInventoryForm';
 import { ImportInventoryForm } from './ImportInventoryForm';
 import { InventoryRow } from './InventoryRow';
@@ -131,26 +132,11 @@ export default async function InventoryPage({
               </tbody>
             </table>
 
-            <div className="row between" style={{ marginTop: 12 }}>
+            <div className="row between wrap" style={{ marginTop: 12, gap: 10 }}>
               <span className="muted">
                 Page {page} of {totalPages}
               </span>
-              <div className="row" style={{ gap: 8 }}>
-                {page > 1 ? (
-                  <Link href={pageHref(page - 1)} className="btn secondary">
-                    ← Prev
-                  </Link>
-                ) : (
-                  <span className="btn secondary disabled">← Prev</span>
-                )}
-                {page < totalPages ? (
-                  <Link href={pageHref(page + 1)} className="btn secondary">
-                    Next →
-                  </Link>
-                ) : (
-                  <span className="btn secondary disabled">Next →</span>
-                )}
-              </div>
+              <Pagination page={page} totalPages={totalPages} hrefFor={pageHref} />
             </div>
           </>
         )}

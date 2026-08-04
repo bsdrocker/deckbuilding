@@ -44,7 +44,7 @@ export default async function DecksPage() {
                   <td>
                     <ColorDots colors={d.colorIdentity} />
                   </td>
-                  <td>{d._count.cards}</td>
+                  <td>{d.cardCount}</td>
                   <td className="muted">{new Date(d.updatedAt).toLocaleDateString()}</td>
                 </tr>
               ))}

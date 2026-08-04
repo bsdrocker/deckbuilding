@@ -7,7 +7,8 @@ export interface DeckListItem {
   visibility: string;
   colorIdentity: string[];
   updatedAt: string;
-  _count: { cards: number };
+  cardCount: number;
+  distinctCount: number;
 }
 
 export interface CardImageUris {

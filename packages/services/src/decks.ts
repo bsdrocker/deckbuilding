@@ -31,11 +31,20 @@ async function assertOwnedDeck(prisma: PrismaClient, deckId: string, userId: str
 }
 
 export async function listDecks(prisma: PrismaClient, userId: string) {
-  return prisma.deck.findMany({
+  const decks = await prisma.deck.findMany({
     where: { userId },
     orderBy: { updatedAt: 'desc' },
-    include: { _count: { select: { cards: true } } },
+    include: { cards: { select: { quantity: true, board: true } } },
   });
+  return decks.map(({ cards, ...deck }) => ({
+    ...deck,
+    // Total cards in the counted zone (mainboard + command) — sums quantities so
+    // duplicate basics count fully. distinctCount is the number of unique entries.
+    cardCount: cards
+      .filter((c) => c.board === 'mainboard' || c.board === 'command')
+      .reduce((sum, c) => sum + c.quantity, 0),
+    distinctCount: cards.length,
+  }));
 }
 
 export async function getDeck(prisma: PrismaClient, deckId: string, userId: string) {

@@ -3,13 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { CardHover } from '@/components/CardHover';
+import { PrintingPickerModal } from '@/components/PrintingPickerModal';
 import type { InventoryItem } from '@/lib/types';
-import {
-  deleteInventoryAction,
-  findPrintingsForOracleAction,
-  updateInventoryAction,
-  type PrintingOption,
-} from '../actions';
+import { deleteInventoryAction, updateInventoryAction } from '../actions';
 
 const CONDITIONS = ['NM', 'LP', 'MP', 'HP', 'DMG'];
 const FINISHES = ['nonfoil', 'foil', 'etched'];
@@ -18,8 +14,7 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [editingPrint, setEditingPrint] = useState(false);
-  const [printings, setPrintings] = useState<PrintingOption[] | null>(null);
+  const [pickingPrint, setPickingPrint] = useState(false);
 
   function run(fn: () => Promise<{ error?: string }>) {
     setError(null);
@@ -28,16 +23,6 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
       if (res.error) setError(res.error);
       else router.refresh();
     });
-  }
-
-  function openPrintPicker() {
-    setEditingPrint(true);
-    if (printings === null) {
-      startTransition(async () => {
-        const res = await findPrintingsForOracleAction(item.printing.oracleId);
-        setPrintings(res.printings ?? []);
-      });
-    }
   }
 
   return (
@@ -57,30 +42,22 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
         <CardHover name={item.printing.oracle.name} imageUrl={item.printing.imageUris?.normal} />
       </td>
       <td>
-        {editingPrint ? (
-          printings === null ? (
-            <span className="muted">Loading…</span>
-          ) : (
-            <select
-              className="board-select"
-              value={item.printing.scryfallId}
-              onChange={(e) => {
-                run(() => updateInventoryAction(item.id, { printingId: e.target.value }));
-                setEditingPrint(false);
-              }}
-              disabled={pending}
-            >
-              {printings.map((p) => (
-                <option key={p.scryfallId} value={p.scryfallId}>
-                  {p.setName} · #{p.collectorNumber} · {p.rarity}
-                </option>
-              ))}
-            </select>
-          )
-        ) : (
-          <button type="button" className="linklike" title="Change printing" onClick={openPrintPicker}>
-            {item.printing.setCode.toUpperCase()} #{item.printing.collectorNumber}
-          </button>
+        <button type="button" className="linklike" title="Change printing" onClick={() => setPickingPrint(true)}>
+          {item.printing.setCode.toUpperCase()} #{item.printing.collectorNumber}
+        </button>
+        {pickingPrint && (
+          <PrintingPickerModal
+            oracleId={item.printing.oracleId}
+            currentPrintingId={item.printing.scryfallId}
+            cardName={item.printing.oracle.name}
+            onClose={() => setPickingPrint(false)}
+            onSelect={(printingId) => {
+              setPickingPrint(false);
+              if (printingId && printingId !== item.printing.scryfallId) {
+                run(() => updateInventoryAction(item.id, { printingId }));
+              }
+            }}
+          />
         )}
       </td>
       <td>
