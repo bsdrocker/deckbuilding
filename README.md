@@ -35,7 +35,7 @@ docker compose up -d
 pnpm --filter @deck/db exec prisma migrate deploy   # or: pnpm db:migrate (dev)
 pnpm db:seed                                         # demo user + API key
 
-# 3. Import card data from Scryfall (~38k cards, ~30s)
+# 3. Import card data from Scryfall (default_cards: ~116k printings across ~38k cards, ~70s)
 pnpm scryfall:import                                 # add --limit 500 for a quick subset
 
 # 4. Run the API (http://localhost:3001, docs at /docs)

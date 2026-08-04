@@ -130,11 +130,20 @@ export interface InventoryItem {
   finish: string;
   condition: string;
   language: string;
+  unitUsd: number;
+  totalUsd: number;
   printing: {
     scryfallId: string;
     setCode: string;
+    setName: string;
     collectorNumber: string;
+    oracleId: string;
     imageUris: CardImageUris | null;
     oracle: { name: string; typeLine: string };
   };
+}
+
+export interface InventoryListResponse {
+  total: number;
+  items: InventoryItem[];
 }

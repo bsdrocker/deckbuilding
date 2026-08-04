@@ -1,22 +1,52 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
-import type { InventoryItem, InventorySummary, InventoryValueBreakdown } from '@/lib/types';
+import type {
+  InventoryListResponse,
+  InventorySummary,
+  InventoryValueBreakdown,
+} from '@/lib/types';
 import { AddInventoryForm } from './AddInventoryForm';
 import { ImportInventoryForm } from './ImportInventoryForm';
 import { InventoryRow } from './InventoryRow';
 
-export default async function InventoryPage() {
+const PAGE_SIZE = 50;
+type Sort = 'name' | 'set' | 'value' | 'recent';
+type Dir = 'asc' | 'desc';
+
+export default async function InventoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; sort?: string; dir?: string }>;
+}) {
+  const sp = await searchParams;
+  const sort = (['name', 'set', 'value', 'recent'].includes(sp.sort ?? '') ? sp.sort : 'name') as Sort;
+  const dir: Dir = sp.dir === 'desc' ? 'desc' : 'asc';
+  const page = Math.max(1, Number(sp.page ?? 1) || 1);
+  const offset = (page - 1) * PAGE_SIZE;
+
   const [listRes, summaryRes, valueRes] = await Promise.all([
-    apiFetch('/v1/inventory?limit=200'),
+    apiFetch(`/v1/inventory?limit=${PAGE_SIZE}&offset=${offset}&sort=${sort}&dir=${dir}`),
     apiFetch('/v1/inventory/summary'),
     apiFetch('/v1/inventory/value'),
   ]);
   if (listRes.status === 401) redirect('/login');
 
-  const { items } = (await listRes.json()) as { items: InventoryItem[] };
+  const { items, total } = (await listRes.json()) as InventoryListResponse;
   const summary = (await summaryRes.json()) as InventorySummary;
   const value = (await valueRes.json()) as InventoryValueBreakdown;
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const from = total === 0 ? 0 : offset + 1;
+  const to = Math.min(offset + PAGE_SIZE, total);
+
+  // Build a header link that toggles direction when already sorting by that column.
+  const sortHref = (col: Sort) => {
+    const nextDir: Dir = sort === col ? (dir === 'asc' ? 'desc' : 'asc') : col === 'value' ? 'desc' : 'asc';
+    return `/inventory?sort=${col}&dir=${nextDir}&page=1`;
+  };
+  const arrow = (col: Sort) => (sort === col ? (dir === 'asc' ? ' ▲' : ' ▼') : '');
+  const pageHref = (p: number) => `/inventory?sort=${sort}&dir=${dir}&page=${p}`;
 
   return (
     <div className="grid" style={{ gap: 16 }}>
@@ -63,61 +93,66 @@ export default async function InventoryPage() {
           <span className="muted">Total value</span>
           <b>${value.totalValueUsd.toFixed(2)}</b>
         </div>
-        {value.topCards.length > 0 && (
-          <>
-            <h3>Top cards by value</h3>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Set</th>
-                  <th>Qty</th>
-                  <th>Unit</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {value.topCards.map((c, i) => (
-                  <tr key={`${c.name}-${c.setCode}-${c.finish}-${i}`}>
-                    <td>{c.name}</td>
-                    <td className="muted">
-                      {c.setCode} #{c.collectorNumber} {c.finish !== 'nonfoil' ? `(${c.finish})` : ''}
-                    </td>
-                    <td>{c.quantity}</td>
-                    <td className="muted">${c.unitUsd.toFixed(2)}</td>
-                    <td>
-                      <b>${c.totalUsd.toFixed(2)}</b>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </>
-        )}
       </div>
 
       <div className="panel">
-        <h2>Items ({items.length})</h2>
-        {items.length === 0 ? (
+        <div className="row between">
+          <h2 style={{ margin: 0 }}>Items</h2>
+          <span className="muted">
+            {from}–{to} of {total}
+          </span>
+        </div>
+        {total === 0 ? (
           <p className="muted">Nothing yet. Add cards above.</p>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Qty</th>
-                <th>Name</th>
-                <th>Set</th>
-                <th>Finish</th>
-                <th>Cond.</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((it) => (
-                <InventoryRow key={it.id} item={it} />
-              ))}
-            </tbody>
-          </table>
+          <>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Qty</th>
+                  <th>
+                    <Link href={sortHref('name')}>Name{arrow('name')}</Link>
+                  </th>
+                  <th>
+                    <Link href={sortHref('set')}>Printing{arrow('set')}</Link>
+                  </th>
+                  <th>Finish</th>
+                  <th>Cond.</th>
+                  <th>
+                    <Link href={sortHref('value')}>Value{arrow('value')}</Link>
+                  </th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it) => (
+                  <InventoryRow key={it.id} item={it} />
+                ))}
+              </tbody>
+            </table>
+
+            <div className="row between" style={{ marginTop: 12 }}>
+              <span className="muted">
+                Page {page} of {totalPages}
+              </span>
+              <div className="row" style={{ gap: 8 }}>
+                {page > 1 ? (
+                  <Link href={pageHref(page - 1)} className="btn secondary">
+                    ← Prev
+                  </Link>
+                ) : (
+                  <span className="btn secondary disabled">← Prev</span>
+                )}
+                {page < totalPages ? (
+                  <Link href={pageHref(page + 1)} className="btn secondary">
+                    Next →
+                  </Link>
+                ) : (
+                  <span className="btn secondary disabled">Next →</span>
+                )}
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>

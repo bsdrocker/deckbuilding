@@ -4,7 +4,12 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { CardHover } from '@/components/CardHover';
 import type { InventoryItem } from '@/lib/types';
-import { deleteInventoryAction, updateInventoryAction } from '../actions';
+import {
+  deleteInventoryAction,
+  findPrintingsForOracleAction,
+  updateInventoryAction,
+  type PrintingOption,
+} from '../actions';
 
 const CONDITIONS = ['NM', 'LP', 'MP', 'HP', 'DMG'];
 const FINISHES = ['nonfoil', 'foil', 'etched'];
@@ -13,6 +18,8 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [editingPrint, setEditingPrint] = useState(false);
+  const [printings, setPrintings] = useState<PrintingOption[] | null>(null);
 
   function run(fn: () => Promise<{ error?: string }>) {
     setError(null);
@@ -21,6 +28,16 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
       if (res.error) setError(res.error);
       else router.refresh();
     });
+  }
+
+  function openPrintPicker() {
+    setEditingPrint(true);
+    if (printings === null) {
+      startTransition(async () => {
+        const res = await findPrintingsForOracleAction(item.printing.oracleId);
+        setPrintings(res.printings ?? []);
+      });
+    }
   }
 
   return (
@@ -39,8 +56,32 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
       <td>
         <CardHover name={item.printing.oracle.name} imageUrl={item.printing.imageUris?.normal} />
       </td>
-      <td className="muted">
-        {item.printing.setCode.toUpperCase()} #{item.printing.collectorNumber}
+      <td>
+        {editingPrint ? (
+          printings === null ? (
+            <span className="muted">Loading…</span>
+          ) : (
+            <select
+              className="board-select"
+              value={item.printing.scryfallId}
+              onChange={(e) => {
+                run(() => updateInventoryAction(item.id, { printingId: e.target.value }));
+                setEditingPrint(false);
+              }}
+              disabled={pending}
+            >
+              {printings.map((p) => (
+                <option key={p.scryfallId} value={p.scryfallId}>
+                  {p.setName} · #{p.collectorNumber} · {p.rarity}
+                </option>
+              ))}
+            </select>
+          )
+        ) : (
+          <button type="button" className="linklike" title="Change printing" onClick={openPrintPicker}>
+            {item.printing.setCode.toUpperCase()} #{item.printing.collectorNumber}
+          </button>
+        )}
       </td>
       <td>
         <select className="board-select" value={item.finish} onChange={(e) => run(() => updateInventoryAction(item.id, { finish: e.target.value }))} disabled={pending}>
@@ -60,6 +101,7 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
           ))}
         </select>
       </td>
+      <td className="muted">${item.totalUsd.toFixed(2)}</td>
       <td>
         <button type="button" className="remove-btn" title="Remove" onClick={() => run(() => deleteInventoryAction(item.id))} disabled={pending}>
           ×

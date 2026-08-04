@@ -233,16 +233,21 @@ async function main() {
     {
       title: 'Get inventory',
       description: 'List the authenticated user\'s card inventory and a summary (distinct cards, copies, value).',
-      inputSchema: { limit: z.number().int().min(1).max(500).optional() },
+      inputSchema: {
+        limit: z.number().int().min(1).max(200).optional(),
+        offset: z.number().int().min(0).optional(),
+        sort: z.enum(['name', 'set', 'value', 'recent']).optional(),
+        dir: z.enum(['asc', 'desc']).optional(),
+      },
     },
-    async ({ limit }) => {
+    async ({ limit, offset, sort, dir }) => {
       try {
         const user = await requireUser();
-        const [items, summary] = await Promise.all([
-          listInventory(prisma, user.id, { limit }),
+        const [list, summary] = await Promise.all([
+          listInventory(prisma, user.id, { limit, offset, sort, dir }),
           inventorySummary(prisma, user.id),
         ]);
-        return json({ summary, items });
+        return json({ summary, total: list.total, items: list.items });
       } catch (err) {
         return errorResult(err);
       }
