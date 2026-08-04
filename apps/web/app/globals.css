@@ -102,11 +102,27 @@ button.secondary, .btn.secondary { background: var(--panel-2); color: var(--text
   border-radius: 6px; width: 26px; height: 26px; padding: 0; font-size: 16px; line-height: 1;
 }
 .remove-btn:hover { background: #3a2020; color: var(--danger); border-color: #6b2f2f; filter: none; }
-.art-btn {
-  background: transparent; border: 1px solid var(--border); border-radius: 6px;
-  width: 26px; height: 26px; padding: 0; font-size: 13px; line-height: 1;
+/* Card name as a click target (opens the printing picker) — looks like text,
+   not a button. Keeps the hover-preview affordance from .card-hover. */
+.card-name-btn {
+  background: transparent; border: none; color: var(--text); padding: 0;
+  font: inherit; text-align: left; cursor: pointer; min-width: 0; max-width: 100%;
 }
-.art-btn:hover { background: var(--panel-2); filter: none; }
+.card-name-btn:hover { filter: none; color: var(--accent); }
+
+/* Destructive action button (delete deck). */
+button.danger, .btn.danger {
+  background: transparent; color: var(--danger); border: 1px solid #6b2f2f;
+}
+button.danger:hover, .btn.danger:hover { background: #3a2020; filter: none; }
+
+/* Type sections within a board group. */
+.board-group + .board-group { margin-top: 20px; }
+.type-heading {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted); font-weight: 600; margin: 12px 0 4px;
+}
+.type-section:first-of-type .type-heading { margin-top: 4px; }
 .linklike {
   background: transparent; border: none; color: var(--accent); padding: 0;
   font: inherit; cursor: pointer; text-decoration: none; border-bottom: 1px dotted var(--border);
@@ -207,8 +223,14 @@ button.secondary, .btn.secondary { background: var(--panel-2); color: var(--text
 .table th, .table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .table th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
 /* card image hover popover */
-.card-hover { position: relative; }
-.card-hover-name { cursor: help; border-bottom: 1px dotted var(--border); }
+.card-hover { position: relative; display: inline-block; max-width: 100%; }
+/* Truncation lives on the name text, not a container of the popover image, so
+   the absolutely-positioned preview is never clipped by overflow:hidden. */
+.card-hover-name {
+  cursor: help; border-bottom: 1px dotted var(--border);
+  display: inline-block; max-width: 100%; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
+}
 .card-hover-img {
   display: none; position: absolute; z-index: 60; bottom: 100%; left: 0;
   width: 244px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6);

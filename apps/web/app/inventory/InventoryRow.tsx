@@ -39,12 +39,14 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
         </span>
       </td>
       <td>
-        <CardHover name={item.printing.oracle.name} imageUrl={item.printing.imageUris?.normal} />
+        <button type="button" className="card-name-btn" title="Change printing" onClick={() => setPickingPrint(true)}>
+          <CardHover name={item.printing.oracle.name} imageUrl={item.printing.imageUris?.normal} />
+        </button>
       </td>
       <td>
-        <button type="button" className="linklike" title="Change printing" onClick={() => setPickingPrint(true)}>
+        <span className="muted">
           {item.printing.setCode.toUpperCase()} #{item.printing.collectorNumber}
-        </button>
+        </span>
         {pickingPrint && (
           <PrintingPickerModal
             oracleId={item.printing.oracleId}

@@ -26,11 +26,18 @@ export type Term =
   | { kind: 'cmc'; c: NumericConstraint }
   | { kind: 'power'; c: NumericConstraint }
   | { kind: 'toughness'; c: NumericConstraint }
+  | { kind: 'loyalty'; c: NumericConstraint }
   | { kind: 'colors'; c: ColorConstraint }
   | { kind: 'identity'; c: ColorConstraint }
   | { kind: 'rarity'; value: string }
   | { kind: 'legal'; value: string }
-  | { kind: 'is'; value: string };
+  | { kind: 'is'; value: string }
+  // Printing-level: set code and release year (matched against any printing).
+  | { kind: 'set'; value: string }
+  | { kind: 'year'; c: NumericConstraint }
+  // Mana cost. `mode` = 'contains' (card cost includes all these symbols, from
+  // `m:`/`m>=`) or 'exact' (card cost equals these symbols, from `m=`).
+  | { kind: 'mana'; mode: 'contains' | 'exact'; symbols: string[] };
 
 /** Boolean expression over terms: `space` = AND, `or` = OR, `-`/`not` = NOT, `()` groups. */
 export type Expr =
@@ -73,8 +80,22 @@ function splitOp(rest: string): { op: NumericOp; value: string } | null {
   return { op: m[1] === ':' ? '=' : (m[1] as NumericOp), value: m[2]! };
 }
 
-const NUMERIC_KEYS = /^(cmc|mv|pow|power|tou|toughness)(>=|<=|=|>|<|:)/i;
+const NUMERIC_KEYS = /^(cmc|mv|pow|power|tou|toughness|loy|loyalty|year)(>=|<=|=|>|<|:)/i;
 const COLOR_KEYS = /^(identity|colors?|ci|id|c)(<=|>=|=|<|>|:|!)/i;
+const MANA_KEYS = /^(m|mana)(>=|<=|=|>|<|:)/i;
+
+/** Split a mana string ("{2}{W}{W}" or "2WW") into canonical tokens. */
+export function manaTokens(raw: string): string[] {
+  const out: string[] = [];
+  const re = /\{([^}]*)\}|(\d+)|([a-z])/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw)) !== null) {
+    if (m[1] !== undefined) out.push(`{${m[1].toUpperCase()}}`);
+    else if (m[2] !== undefined) out.push(`{${m[2]}}`);
+    else if (m[3] !== undefined) out.push(`{${m[3].toUpperCase()}}`);
+  }
+  return out;
+}
 
 function colorOp(raw: string, isIdentity: boolean): NumericOp {
   if (raw === ':') return isIdentity ? '<=' : '>='; // id: subset, c: contains
@@ -104,7 +125,19 @@ function parseTermString(token: string): Term | null {
     const c = { op: parsed.op, value: num };
     if (key === 'cmc' || key === 'mv') return { kind: 'cmc', c };
     if (key === 'pow' || key === 'power') return { kind: 'power', c };
-    return { kind: 'toughness', c };
+    if (key === 'tou' || key === 'toughness') return { kind: 'toughness', c };
+    if (key === 'loy' || key === 'loyalty') return { kind: 'loyalty', c };
+    return { kind: 'year', c };
+  }
+
+  const manaMatch = token.match(MANA_KEYS);
+  if (manaMatch) {
+    const rawOp = manaMatch[2]!;
+    const symbols = manaTokens(unquote(token.slice(manaMatch[1]!.length + rawOp.length)));
+    if (symbols.length === 0) return null;
+    // ":" and ">=" mean "cost contains these"; "=" means exact.
+    const mode = rawOp === '=' ? 'exact' : 'contains';
+    return { kind: 'mana', mode, symbols };
   }
 
   const colorMatch = token.match(COLOR_KEYS);
@@ -128,6 +161,7 @@ function parseTermString(token: string): Term | null {
       case 'f': case 'format': case 'legal': return { kind: 'legal', value };
       case 'r': case 'rarity': return { kind: 'rarity', value };
       case 'is': return { kind: 'is', value };
+      case 's': case 'e': case 'set': case 'edition': return { kind: 'set', value };
       default: return { kind: 'name', value: unquote(token).toLowerCase() };
     }
   }
@@ -211,8 +245,9 @@ class Parser {
 
 /**
  * Parse a Scryfall-style query into a boolean expression tree. Supports:
- *   c:/id: (+ comparison ops), t:, o:, kw:, r:, f:, is:, cmc/pow/tou (with ops),
- *   quoted phrases, `-`/`not` negation, `or`/`and`, and parenthesised grouping.
+ *   c:/id: (+ comparison ops), t:, o:, kw:, r:, f:, is:, s:/e:/set:, m:/mana,
+ *   cmc/pow/tou/loy/year (with ops), quoted phrases, `-`/`not` negation,
+ *   `or`/`and`, and parenthesised grouping.
  */
 export function parseQuery(query: string): CardQuery {
   return { root: new Parser(tokenize(query)).parse() };
@@ -251,6 +286,26 @@ function colorConstraintMatches(cardColors: string[], c: ColorConstraint): boole
   }
 }
 
+/** Multiset containment: does `card` include every symbol in `query` (by count)? */
+function manaContains(cardTokens: string[], queryTokens: string[]): boolean {
+  const counts = new Map<string, number>();
+  for (const t of cardTokens) counts.set(t, (counts.get(t) ?? 0) + 1);
+  for (const t of queryTokens) {
+    const n = counts.get(t) ?? 0;
+    if (n <= 0) return false;
+    counts.set(t, n - 1);
+  }
+  return true;
+}
+
+function manaMatches(card: CardData, term: Extract<Term, { kind: 'mana' }>): boolean {
+  const cardTokens = manaTokens(card.manaCost ?? '');
+  if (term.mode === 'exact') {
+    return cardTokens.length === term.symbols.length && manaContains(cardTokens, term.symbols);
+  }
+  return manaContains(cardTokens, term.symbols);
+}
+
 function isMatches(card: CardData, value: string): boolean {
   const type = card.typeLine.toLowerCase();
   const oracle = (card.oracleText ?? '').toLowerCase();
@@ -286,9 +341,17 @@ function termMatches(card: CardData, term: Term): boolean {
       const t = parseStat(card.toughness);
       return t !== null && numMatches(t, term.c);
     }
+    case 'loyalty': {
+      const l = parseStat(card.loyalty);
+      return l !== null && numMatches(l, term.c);
+    }
     case 'colors': return colorConstraintMatches(card.colors, term.c);
     case 'identity': return colorConstraintMatches(card.colorIdentity, term.c);
+    case 'mana': return manaMatches(card, term);
     case 'rarity': return false; // rarity is printing-level; not available in-memory
+    // set / year are printing-level; CardData has no printings, so no in-memory match.
+    case 'set': return false;
+    case 'year': return false;
     case 'legal': {
       const l = card.legalities[term.value];
       return l === 'legal' || l === 'restricted';

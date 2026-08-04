@@ -1,6 +1,6 @@
 import type { Board, Color } from '@deck/core';
 import type { DeckBoard, DeckFormat, DeckStatus, PrismaClient } from '@deck/db';
-import { resolveNames } from './cards.js';
+import { printingRefKey, resolveNames, resolvePrintingRefs } from './cards.js';
 import { loadDeck } from './deckData.js';
 import { ServiceError } from './errors.js';
 
@@ -20,6 +20,9 @@ export interface CardEntryInput {
   quantity?: number;
   board?: Board;
   categories?: string[];
+  /** Optional "(SET) collector#" hint; resolved to a printing before the name. */
+  setCode?: string;
+  collectorNumber?: string;
 }
 
 const COLORS: Color[] = ['W', 'U', 'B', 'R', 'G'];
@@ -130,15 +133,32 @@ export async function addCardsToDeck(
 ): Promise<AddCardsResult> {
   await assertOwnedDeck(prisma, deckId, userId);
 
-  // Resolve any name-only entries in one batch.
-  const namesToResolve = entries.filter((e) => !e.oracleId && e.name).map((e) => e.name!);
-  const { resolved, unresolved } = await resolveNames(prisma, namesToResolve);
+  // Resolve in two batches: exact printings (set+collector) take precedence over
+  // names, so flavor-named reprints resolve even when the printed name isn't the
+  // oracle name (e.g. Secret Lair "Adamantium Bonding Tank" = The Ozolith).
+  const printingRefs = entries
+    .filter((e) => !e.oracleId && e.setCode && e.collectorNumber)
+    .map((e) => ({ setCode: e.setCode!, collectorNumber: e.collectorNumber! }));
+  const byPrinting = await resolvePrintingRefs(prisma, printingRefs);
 
+  const namesToResolve = entries.filter((e) => !e.oracleId && e.name).map((e) => e.name!);
+  const { resolved } = await resolveNames(prisma, namesToResolve);
+
+  const unresolved: string[] = [];
   let added = 0;
   for (const entry of entries) {
     let oracleId = entry.oracleId;
+    if (!oracleId && entry.setCode && entry.collectorNumber) {
+      oracleId = byPrinting.get(printingRefKey(entry.setCode, entry.collectorNumber))?.oracleId;
+    }
     if (!oracleId && entry.name) oracleId = resolved.get(entry.name.trim())?.oracleId;
-    if (!oracleId) continue;
+    if (!oracleId) {
+      if (entry.name) {
+        const suffix = entry.setCode ? ` (${entry.setCode}${entry.collectorNumber ? ' ' + entry.collectorNumber : ''})` : '';
+        unresolved.push(`${entry.name}${suffix}`);
+      }
+      continue;
+    }
 
     const quantity = entry.quantity ?? 1;
     const board = (entry.board ?? 'mainboard') as DeckBoard;
@@ -307,7 +327,13 @@ export async function removeDeckCardBySelector(
 }
 
 export interface ImportDeckInput extends CreateDeckInput {
-  entries: { quantity: number; name: string; board: Board }[];
+  entries: {
+    quantity: number;
+    name: string;
+    board: Board;
+    setCode?: string;
+    collectorNumber?: string;
+  }[];
 }
 
 /** Create a deck and populate it from parsed decklist entries. */
@@ -321,7 +347,13 @@ export async function importDeck(
     prisma,
     deck.id,
     userId,
-    input.entries.map((e) => ({ name: e.name, quantity: e.quantity, board: e.board })),
+    input.entries.map((e) => ({
+      name: e.name,
+      quantity: e.quantity,
+      board: e.board,
+      setCode: e.setCode,
+      collectorNumber: e.collectorNumber,
+    })),
   );
   return { deckId: deck.id, added: result.added, unresolved: result.unresolved };
 }

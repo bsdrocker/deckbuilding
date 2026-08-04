@@ -401,10 +401,10 @@ describe('parseDecklist', () => {
   it('parses quantities, boards, and set annotations', () => {
     const lines = parseDecklist(`Commander\n1 Krenko, Mob Boss (C21) 263\n\nDeck\n4x Lightning Bolt\n30 Mountain\n# a comment\nSideboard\n2 Pyroblast`);
     expect(lines).toEqual([
-      { quantity: 1, name: 'Krenko, Mob Boss', board: 'command' },
-      { quantity: 4, name: 'Lightning Bolt', board: 'mainboard' },
-      { quantity: 30, name: 'Mountain', board: 'mainboard' },
-      { quantity: 2, name: 'Pyroblast', board: 'sideboard' },
+      { quantity: 1, name: 'Krenko, Mob Boss', board: 'command', setCode: 'C21', collectorNumber: '263' },
+      { quantity: 4, name: 'Lightning Bolt', board: 'mainboard', setCode: undefined, collectorNumber: undefined },
+      { quantity: 30, name: 'Mountain', board: 'mainboard', setCode: undefined, collectorNumber: undefined },
+      { quantity: 2, name: 'Pyroblast', board: 'sideboard', setCode: undefined, collectorNumber: undefined },
     ]);
   });
 });

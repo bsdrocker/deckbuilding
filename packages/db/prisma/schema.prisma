@@ -42,6 +42,7 @@ model OracleCard {
   loyalty      String?
   powerNum     Float?  @map("power_num")
   toughnessNum Float?  @map("toughness_num")
+  loyaltyNum   Float?  @map("loyalty_num")
 
   printings  CardPrinting[]
   deckCards  DeckCard[]
@@ -54,6 +55,7 @@ model OracleCard {
   @@index([edhrecRank])
   @@index([powerNum])
   @@index([toughnessNum])
+  @@index([loyaltyNum])
   @@map("oracle_cards")
 }
 

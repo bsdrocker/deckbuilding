@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import type { CardSearchResult } from '@/lib/types';
-import { CardHover } from '@/components/CardHover';
+import { CardNameButton } from '@/components/CardNameButton';
 import { ColorDots } from '@/components/ColorDots';
 
 export default async function CardsPage({
@@ -26,9 +26,10 @@ export default async function CardsPage({
         <p className="muted">
           Scryfall-subset syntax: <code>c:</code>/<code>id:</code> colors, <code>t:</code> type,{' '}
           <code>o:</code> oracle text, <code>kw:</code> keyword, <code>r:</code> rarity,{' '}
-          <code>cmc/pow/tou</code> with <code>&gt; &lt; &gt;= &lt;=</code>, <code>f:commander</code>,{' '}
+          <code>m:</code> mana cost, <code>s:</code>/<code>set:</code> set, <code>cmc/pow/tou/loy/year</code>{' '}
+          with <code>&gt; &lt; &gt;= &lt;=</code>, <code>f:commander</code>, <code>is:</code>,{' '}
           <code>-</code> to negate, and <code>or</code>. E.g.{' '}
-          <code>t:creature id:r -t:legendary pow&gt;=4 or kw:flying</code>.
+          <code>t:planeswalker id:r loy&gt;=5 or (m:WW year&gt;=2022)</code>.
         </p>
       </div>
 
@@ -59,7 +60,7 @@ export default async function CardsPage({
               {result.cards.map((c) => (
                 <tr key={c.oracleId}>
                   <td>
-                    <CardHover name={c.name} imageUrl={c.imageUris?.normal} />
+                    <CardNameButton oracleId={c.oracleId} name={c.name} imageUrl={c.imageUris?.normal} />
                   </td>
                   <td className="muted">{c.manaCost ?? ''}</td>
                   <td>{c.cmc}</td>
