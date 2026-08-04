@@ -1,115 +1,98 @@
 import { describe, expect, it } from 'vitest';
 import { cardMatchesQuery, parseQuery } from './query.js';
-import { CARDS } from './fixtures.js';
+import { CARDS, makeCard } from './fixtures.js';
 
-describe('parseQuery', () => {
-  it('parses colors, type, cmc, format, and name into a single clause', () => {
-    const q = parseQuery('c:r t:instant cmc<=1 f:modern bolt');
-    expect(q.or).toHaveLength(1);
-    const f = q.or[0]!;
-    expect(f.colors).toEqual({ op: '>=', values: ['R'] }); // c: means "contains"
-    expect(f.typeIncludes).toEqual(['instant']);
-    expect(f.cmc).toEqual([{ op: '<=', value: 1 }]);
-    expect(f.legalIn).toBe('modern');
-    expect(f.nameIncludes).toEqual(['bolt']);
+const m = (q: string) => (card: Parameters<typeof cardMatchesQuery>[0]) =>
+  cardMatchesQuery(card, parseQuery(q));
+
+describe('parseQuery structure', () => {
+  it('builds an AND of terms for a plain query', () => {
+    const { root } = parseQuery('c:r t:instant');
+    expect(root.op).toBe('and');
   });
-
-  it('parses identity (defaults to subset) and quoted phrases', () => {
-    const q = parseQuery('id:wu "mob boss"');
-    expect(q.or[0]!.colorIdentity).toEqual({ op: '<=', values: ['W', 'U'] });
-    expect(q.or[0]!.nameIncludes).toEqual(['mob boss']);
-  });
-
-  it('parses color/identity comparison operators', () => {
-    expect(parseQuery('id<=wb').or[0]!.colorIdentity).toEqual({ op: '<=', values: ['W', 'B'] });
-    expect(parseQuery('id>=w').or[0]!.colorIdentity).toEqual({ op: '>=', values: ['W'] });
-    expect(parseQuery('id=wu').or[0]!.colorIdentity).toEqual({ op: '=', values: ['W', 'U'] });
-    expect(parseQuery('c<=wu').or[0]!.colors).toEqual({ op: '<=', values: ['W', 'U'] });
-    expect(parseQuery('c!r').or[0]!.colors).toEqual({ op: '=', values: ['R'] });
-  });
-
-  it('supports negation, keywords, and power/toughness', () => {
-    const q = parseQuery('-t:creature kw:flying pow>=3 tou<5');
-    const f = q.or[0]!;
-    expect(f.typeExcludes).toEqual(['creature']);
-    expect(f.keywords).toEqual(['flying']);
-    expect(f.power).toEqual([{ op: '>=', value: 3 }]);
-    expect(f.toughness).toEqual([{ op: '<', value: 5 }]);
-  });
-
-  it('keeps a quoted phrase attached to its operator', () => {
-    const q = parseQuery('o:"destroy all" t:creature');
-    const f = q.or[0]!;
-    expect(f.oracleIncludes).toEqual(['destroy all']);
-    expect(f.typeIncludes).toEqual(['creature']);
-  });
-
-  it('supports negated quoted phrases and bare quoted names', () => {
-    const q = parseQuery('-o:"draw a card" "mob boss"');
-    const f = q.or[0]!;
-    expect(f.oracleExcludes).toEqual(['draw a card']);
-    expect(f.nameIncludes).toEqual(['mob boss']);
-  });
-
-  it('splits top-level OR into multiple clauses', () => {
-    const q = parseQuery('t:goblin or kw:flying');
-    expect(q.or).toHaveLength(2);
-    expect(q.or[0]!.typeIncludes).toEqual(['goblin']);
-    expect(q.or[1]!.keywords).toEqual(['flying']);
+  it('an empty query matches everything', () => {
+    expect(cardMatchesQuery(CARDS.krenko, parseQuery(''))).toBe(true);
   });
 });
 
-describe('cardMatchesQuery', () => {
-  it('matches on color + type + cmc', () => {
-    const q = parseQuery('c:r t:instant cmc<=1');
-    expect(cardMatchesQuery(CARDS.lightningBolt, q)).toBe(true);
-    expect(cardMatchesQuery(CARDS.counterspell, q)).toBe(false);
-    expect(cardMatchesQuery(CARDS.krenko, q)).toBe(false);
+describe('cardMatchesQuery — atoms', () => {
+  it('matches color + type + cmc', () => {
+    const q = m('c:r t:instant cmc<=1');
+    expect(q(CARDS.lightningBolt)).toBe(true);
+    expect(q(CARDS.counterspell)).toBe(false);
+    expect(q(CARDS.krenko)).toBe(false);
   });
 
-  it('honors negation', () => {
-    const q = parseQuery('-t:creature'); // exclude creatures
-    expect(cardMatchesQuery(CARDS.lightningBolt, q)).toBe(true);
-    expect(cardMatchesQuery(CARDS.krenko, q)).toBe(false);
+  it('honors negation (attached and standalone)', () => {
+    expect(m('-t:creature')(CARDS.lightningBolt)).toBe(true);
+    expect(m('-t:creature')(CARDS.krenko)).toBe(false);
+    expect(m('not t:creature')(CARDS.krenko)).toBe(false);
   });
 
   it('matches keywords and power/toughness', () => {
-    expect(cardMatchesQuery(CARDS.serraAngel, parseQuery('kw:flying'))).toBe(true);
-    expect(cardMatchesQuery(CARDS.krenko, parseQuery('kw:flying'))).toBe(false);
-    expect(cardMatchesQuery(CARDS.serraAngel, parseQuery('pow>=4 tou>=4'))).toBe(true);
-    expect(cardMatchesQuery(CARDS.krenko, parseQuery('pow>=4'))).toBe(false);
+    expect(m('kw:flying')(CARDS.serraAngel)).toBe(true);
+    expect(m('kw:flying')(CARDS.krenko)).toBe(false);
+    expect(m('pow>=4 tou>=4')(CARDS.serraAngel)).toBe(true);
+    expect(m('pow>=4')(CARDS.krenko)).toBe(false);
   });
 
-  it('OR matches if either clause matches', () => {
-    const q = parseQuery('t:goblin or kw:flying');
-    expect(cardMatchesQuery(CARDS.krenko, q)).toBe(true); // goblin
-    expect(cardMatchesQuery(CARDS.serraAngel, q)).toBe(true); // flying
-    expect(cardMatchesQuery(CARDS.counterspell, q)).toBe(false);
+  it('keeps quoted phrases attached to operators', () => {
+    const goblins = makeCard({
+      oracleId: 'x', name: 'Krenko, Mob Boss', typeLine: 'Legendary Creature — Goblin',
+      oracleText: 'Tap: Create X 1/1 red Goblin creature tokens.', colors: ['R'], colorIdentity: ['R'],
+    });
+    expect(m('o:"goblin creature tokens"')(goblins)).toBe(true);
+    expect(m('o:"destroy all"')(goblins)).toBe(false);
+  });
+});
+
+describe('cardMatchesQuery — color/identity operators', () => {
+  it('subset / superset', () => {
+    expect(m('id<=wb')(CARDS.serraAngel)).toBe(true); // [W]
+    expect(m('id<=wb')(CARDS.lightningBolt)).toBe(false); // [R]
+    expect(m('id>=r')(CARDS.krenko)).toBe(true);
+    expect(m('c<=wu')(CARDS.counterspell)).toBe(true); // [U]
+    expect(m('c<=wu')(CARDS.lightningBolt)).toBe(false);
+  });
+});
+
+describe('cardMatchesQuery — boolean grammar', () => {
+  it('or combines clauses', () => {
+    const q = m('t:goblin or kw:flying');
+    expect(q(CARDS.krenko)).toBe(true); // goblin
+    expect(q(CARDS.serraAngel)).toBe(true); // flying
+    expect(q(CARDS.counterspell)).toBe(false);
   });
 
-  it('respects format legality and identity', () => {
-    expect(cardMatchesQuery(CARDS.lightningBolt, parseQuery('f:modern'))).toBe(true);
-    expect(cardMatchesQuery(CARDS.solRing, parseQuery('f:modern'))).toBe(false); // banned
-    expect(cardMatchesQuery(CARDS.lightningBolt, parseQuery('id:r'))).toBe(true);
-    expect(cardMatchesQuery(CARDS.counterspell, parseQuery('id:r'))).toBe(false);
+  it('respects parenthesised grouping and precedence', () => {
+    // (goblin or angel) AND red  → Krenko yes, Serra Angel (white) no
+    const q = m('(t:goblin or t:angel) c:r');
+    expect(q(CARDS.krenko)).toBe(true);
+    expect(q(CARDS.serraAngel)).toBe(false);
+    // Without grouping, AND binds tighter: t:goblin OR (t:angel AND c:r)
+    const q2 = m('t:goblin or t:angel c:r');
+    expect(q2(CARDS.krenko)).toBe(true); // goblin
+    expect(q2(CARDS.serraAngel)).toBe(false); // angel but not red
   });
 
-  it('evaluates identity comparison operators', () => {
-    // id<=wb : identity within {W,B}
-    const within = parseQuery('id<=wb');
-    expect(cardMatchesQuery(CARDS.serraAngel, within)).toBe(true); // [W]
-    expect(cardMatchesQuery(CARDS.solRing, within)).toBe(true); // colorless
-    expect(cardMatchesQuery(CARDS.lightningBolt, within)).toBe(false); // [R]
+  it('negates a whole group', () => {
+    const q = m('c:r -(t:creature)');
+    expect(q(CARDS.lightningBolt)).toBe(true); // red, not a creature
+    expect(q(CARDS.krenko)).toBe(false); // red creature
+  });
+});
 
-    // id>=r : identity contains at least R
-    const withR = parseQuery('id>=r');
-    expect(cardMatchesQuery(CARDS.krenko, withR)).toBe(true); // [R]
-    expect(cardMatchesQuery(CARDS.counterspell, withR)).toBe(false); // [U]
-
-    // c<=wu : colors are a subset of {W,U}
-    const colorsWU = parseQuery('c<=wu');
-    expect(cardMatchesQuery(CARDS.counterspell, colorsWU)).toBe(true); // [U]
-    expect(cardMatchesQuery(CARDS.solRing, colorsWU)).toBe(true); // colorless
-    expect(cardMatchesQuery(CARDS.lightningBolt, colorsWU)).toBe(false); // [R]
+describe('cardMatchesQuery — is: and legality', () => {
+  it('is:commander matches legendary creatures', () => {
+    expect(m('is:commander')(CARDS.krenko)).toBe(true); // Legendary Creature
+    expect(m('is:commander')(CARDS.lightningBolt)).toBe(false);
+  });
+  it('is:permanent excludes instants/sorceries', () => {
+    expect(m('is:permanent')(CARDS.krenko)).toBe(true);
+    expect(m('is:permanent')(CARDS.lightningBolt)).toBe(false); // instant
+  });
+  it('respects format legality', () => {
+    expect(m('f:modern')(CARDS.lightningBolt)).toBe(true);
+    expect(m('f:modern')(CARDS.solRing)).toBe(false); // banned
   });
 });

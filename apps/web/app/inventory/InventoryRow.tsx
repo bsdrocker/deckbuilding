@@ -79,6 +79,18 @@ export function InventoryRow({ item }: { item: InventoryItem }) {
         </select>
       </td>
       <td className="muted">${item.totalUsd.toFixed(2)}</td>
+      <td className="muted" title="Copies used by your built decks">
+        {item.used || '—'}
+      </td>
+      <td title="Owned copies not committed to built decks">
+        {item.free < 0 ? (
+          <span className="pill bad" title="Over-allocated: built decks need more than you own">
+            {item.free}
+          </span>
+        ) : (
+          <span className={item.free === 0 ? 'muted' : ''}>{item.free}</span>
+        )}
+      </td>
       <td>
         <button type="button" className="remove-btn" title="Remove" onClick={() => run(() => deleteInventoryAction(item.id))} disabled={pending}>
           ×

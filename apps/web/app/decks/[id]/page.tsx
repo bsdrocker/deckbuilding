@@ -6,6 +6,8 @@ import { ColorDots } from '@/components/ColorDots';
 import { ManaCurve } from '@/components/ManaCurve';
 import { AddCardForm } from './AddCardForm';
 import { DeckCardRow } from './DeckCardRow';
+import { DeckStatusToggle } from './DeckStatusToggle';
+import { PrimerSection } from './PrimerSection';
 
 const BOARD_LABELS: Record<string, string> = {
   command: 'Command Zone',
@@ -48,12 +50,15 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
             <h1>{deck.name}</h1>
             <ColorDots colors={deck.colorIdentity} />
           </div>
-          <span className="muted">{deck.format}</span>{' '}
-          {analysis.validation.legal ? (
-            <span className="pill ok">legal</span>
-          ) : (
-            <span className="pill bad">{analysis.validation.issues.length} issue(s)</span>
-          )}
+          <div className="row wrap" style={{ gap: 10, marginTop: 4 }}>
+            <span className="muted">{deck.format}</span>
+            {analysis.validation.legal ? (
+              <span className="pill ok">legal</span>
+            ) : (
+              <span className="pill bad">{analysis.validation.issues.length} issue(s)</span>
+            )}
+            <DeckStatusToggle deckId={deck.id} status={deck.status} />
+          </div>
         </div>
         <Link href="/decks" className="btn secondary">
           ← All decks
@@ -66,6 +71,8 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
             <h2>Add a card</h2>
             <AddCardForm deckId={deck.id} />
           </div>
+
+          <PrimerSection deckId={deck.id} primer={deck.primer} />
 
           <div className="panel">
             {deck.cards.length === 0 ? (

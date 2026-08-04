@@ -115,9 +115,23 @@ card data imported.
 - **Collection value tracking** — finish-aware value rollups, top cards, per-deck
   owned value, and CSV export (`GET /v1/inventory/export.csv`).
 
-## Milestone 3+ (not yet built)
+## Milestone 3 (done) — collection-aware decks
+
+- **Deck primers** — a Markdown writeup per deck, rendered (and editable) in the
+  deck view; settable via `PATCH /v1/decks/:id` and the MCP `update_deck` tool.
+- **Built / brewing status** — mark a deck physically **built** (draws its cards
+  down from inventory) vs. **brewing** (just a list). Status toggle + badges.
+- **Inventory used / free** — owned cards show how many copies are **used** by
+  built decks vs. **free** to brew with, with a filter (used/unused/conflict) and
+  a **collection-conflicts** panel when built decks over-allocate a card. New
+  `GET /v1/inventory/allocation`; `find_owned_options` gains `onlyFree`.
+- **Fuller Scryfall grammar** — a proper boolean parser: parenthesised grouping,
+  `and`/`or`, negated groups, and `is:` filters (`is:commander`, `is:permanent`,
+  `is:vanilla`) on top of the existing operators.
+
+## Milestone 4+ (not yet built)
 
 Public deck browsing/social + shareable links, playtesting/sample hands, price
-history over time, collaborative decks, the full Scryfall grammar (nested
-parentheses, all `is:` filters), and further UI polish toward full
+history over time, collaborative decks, remaining Scryfall grammar (mana-cost
+`m:`, `set:`/`year:`, exotic `is:`, loyalty), and further UI polish toward full
 Moxfield/Archidekt parity.

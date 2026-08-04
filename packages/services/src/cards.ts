@@ -1,92 +1,100 @@
 import {
   parseQuery,
-  type CardClause,
   type CardQuery,
   type ColorConstraint,
+  type Expr,
   type NumericConstraint,
+  type Term,
 } from '@deck/core';
 import type { OracleCard, Prisma, PrismaClient } from '@deck/db';
 import { ServiceError } from './errors.js';
 
 const ALL_COLORS = ['W', 'U', 'B', 'R', 'G'] as const;
 
-function numericWhere(constraints: NumericConstraint[], field: 'cmc' | 'powerNum' | 'toughnessNum'): Prisma.OracleCardWhereInput[] {
-  return constraints.map((c) => {
-    const op = c.op === '=' ? 'equals' : c.op === '>' ? 'gt' : c.op === '<' ? 'lt' : c.op === '>=' ? 'gte' : 'lte';
-    return { [field]: { [op]: c.value } } as Prisma.OracleCardWhereInput;
-  });
+function numericWhere(c: NumericConstraint, field: 'cmc' | 'powerNum' | 'toughnessNum'): Prisma.OracleCardWhereInput {
+  const op = c.op === '=' ? 'equals' : c.op === '>' ? 'gt' : c.op === '<' ? 'lt' : c.op === '>=' ? 'gte' : 'lte';
+  return { [field]: { [op]: c.value } } as Prisma.OracleCardWhereInput;
 }
 
 /**
- * Translate a color/identity comparison into Prisma array predicates on `field`.
- * Q = query colors, complement = the other colors. subset = no colors outside Q;
- * superset = has all of Q; proper variants add a not-equal condition.
+ * A color/identity comparison as Prisma array predicates on `field`. Q = query
+ * colors, complement = the others. subset = no colors outside Q; superset = has
+ * all of Q; proper variants add a not-equal condition.
  */
-function colorWhere(field: 'colors' | 'colorIdentity', c: ColorConstraint): Prisma.OracleCardWhereInput[] {
+function colorWhere(field: 'colors' | 'colorIdentity', c: ColorConstraint): Prisma.OracleCardWhereInput {
   const Q = c.values;
   const complement = ALL_COLORS.filter((x) => !Q.includes(x));
   const hasAll = { [field]: { hasEvery: Q } } as Prisma.OracleCardWhereInput;
   const noneOutside = complement.length
     ? [{ NOT: { [field]: { hasSome: complement } } } as Prisma.OracleCardWhereInput]
     : [];
+  let parts: Prisma.OracleCardWhereInput[];
   switch (c.op) {
-    case '<=': return noneOutside; // subset
-    case '>=': return [hasAll]; // superset
-    case '=': return [hasAll, ...noneOutside]; // exact
-    case '<': return [...noneOutside, { NOT: hasAll }]; // proper subset
-    case '>': return [hasAll, { [field]: { hasSome: complement } } as Prisma.OracleCardWhereInput]; // proper superset
+    case '<=': parts = noneOutside; break; // subset
+    case '>=': parts = [hasAll]; break; // superset
+    case '=': parts = [hasAll, ...noneOutside]; break; // exact
+    case '<': parts = [...noneOutside, { NOT: hasAll }]; break; // proper subset
+    case '>': parts = [hasAll, { [field]: { hasSome: complement } } as Prisma.OracleCardWhereInput]; break;
+  }
+  return parts.length ? { AND: parts } : {};
+}
+
+/** `is:` filters as Prisma predicates (case-insensitive type/oracle checks). */
+function isWhere(value: string): Prisma.OracleCardWhereInput {
+  const ci = (s: string) => ({ typeLine: { contains: s, mode: 'insensitive' as const } });
+  const oracle = (s: string) => ({ oracleText: { contains: s, mode: 'insensitive' as const } });
+  switch (value) {
+    case 'commander':
+      return { OR: [{ AND: [ci('Legendary'), ci('Creature')] }, oracle('can be your commander')] };
+    case 'permanent':
+      return { NOT: { OR: [ci('Instant'), ci('Sorcery')] } };
+    case 'spell':
+      return { NOT: ci('Land') };
+    case 'vanilla':
+      return { AND: [ci('Creature'), { OR: [{ oracleText: null }, { oracleText: '' }] }] };
+    default:
+      return { oracleId: '__no_such_is_filter__' }; // unknown is: matches nothing
   }
 }
 
-/** Translate a single AND-clause into a Prisma where over OracleCard. */
-function clauseToWhere(clause: CardClause): Prisma.OracleCardWhereInput {
-  const and: Prisma.OracleCardWhereInput[] = [];
-
-  for (const n of clause.nameIncludes) and.push({ name: { contains: n, mode: 'insensitive' } });
-  for (const n of clause.nameExcludes) and.push({ NOT: { name: { contains: n, mode: 'insensitive' } } });
-  for (const t of clause.typeIncludes) and.push({ typeLine: { contains: t, mode: 'insensitive' } });
-  for (const t of clause.typeExcludes) and.push({ NOT: { typeLine: { contains: t, mode: 'insensitive' } } });
-  for (const o of clause.oracleIncludes) and.push({ oracleText: { contains: o, mode: 'insensitive' } });
-  for (const o of clause.oracleExcludes) and.push({ NOT: { oracleText: { contains: o, mode: 'insensitive' } } });
-
-  // Keywords match case-insensitively (Scryfall stores capitalized keywords).
-  for (const k of clause.keywords) {
-    and.push({ keywords: { hasSome: [k, k[0]!.toUpperCase() + k.slice(1)] } });
+/** Translate a single atomic term into a Prisma where over OracleCard. */
+function termToWhere(term: Term): Prisma.OracleCardWhereInput {
+  switch (term.kind) {
+    case 'name': return { name: { contains: term.value, mode: 'insensitive' } };
+    case 'type': return { typeLine: { contains: term.value, mode: 'insensitive' } };
+    case 'oracle': return { oracleText: { contains: term.value, mode: 'insensitive' } };
+    case 'keyword':
+      return { keywords: { hasSome: [term.value, term.value[0]!.toUpperCase() + term.value.slice(1)] } };
+    case 'cmc': return numericWhere(term.c, 'cmc');
+    case 'power': return numericWhere(term.c, 'powerNum');
+    case 'toughness': return numericWhere(term.c, 'toughnessNum');
+    case 'colors': return colorWhere('colors', term.c);
+    case 'identity': return colorWhere('colorIdentity', term.c);
+    case 'rarity': return { printings: { some: { rarity: { equals: term.value } } } };
+    case 'legal':
+      return {
+        OR: [
+          { legalities: { path: [term.value], equals: 'legal' } },
+          { legalities: { path: [term.value], equals: 'restricted' } },
+        ],
+      };
+    case 'is': return isWhere(term.value);
   }
-  for (const k of clause.keywordsExcluded) {
-    and.push({ NOT: { keywords: { hasSome: [k, k[0]!.toUpperCase() + k.slice(1)] } } });
-  }
-
-  and.push(...numericWhere(clause.cmc, 'cmc'));
-  and.push(...numericWhere(clause.power, 'powerNum'));
-  and.push(...numericWhere(clause.toughness, 'toughnessNum'));
-
-  if (clause.colors) and.push(...colorWhere('colors', clause.colors));
-  if (clause.colorsExcluded.length) {
-    and.push({ NOT: { colors: { hasSome: clause.colorsExcluded } } });
-  }
-  if (clause.colorIdentity) and.push(...colorWhere('colorIdentity', clause.colorIdentity));
-  if (clause.legalIn) {
-    and.push({
-      OR: [
-        { legalities: { path: [clause.legalIn], equals: 'legal' } },
-        { legalities: { path: [clause.legalIn], equals: 'restricted' } },
-      ],
-    });
-  }
-  if (clause.rarity.length) {
-    and.push({ printings: { some: { rarity: { in: clause.rarity } } } });
-  }
-
-  return and.length ? { AND: and } : {};
 }
 
-/** Translate a parsed CardQuery (OR of clauses) into a Prisma where. */
+function exprToWhere(e: Expr): Prisma.OracleCardWhereInput {
+  switch (e.op) {
+    case 'true': return {};
+    case 'term': return termToWhere(e.term);
+    case 'not': return { NOT: exprToWhere(e.node) };
+    case 'and': return { AND: e.nodes.map(exprToWhere) };
+    case 'or': return { OR: e.nodes.map(exprToWhere) };
+  }
+}
+
+/** Translate a parsed CardQuery (boolean expression tree) into a Prisma where. */
 export function filterToOracleWhere(query: CardQuery): Prisma.OracleCardWhereInput {
-  const clauses = query.or.map(clauseToWhere).filter((w) => Object.keys(w).length > 0);
-  if (clauses.length === 0) return {};
-  if (clauses.length === 1) return clauses[0]!;
-  return { OR: clauses };
+  return exprToWhere(query.root);
 }
 
 export interface SearchOptions {

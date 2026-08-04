@@ -1,5 +1,5 @@
 import type { Board, Color } from '@deck/core';
-import type { DeckBoard, DeckFormat, PrismaClient } from '@deck/db';
+import type { DeckBoard, DeckFormat, DeckStatus, PrismaClient } from '@deck/db';
 import { resolveNames } from './cards.js';
 import { loadDeck } from './deckData.js';
 import { ServiceError } from './errors.js';
@@ -9,6 +9,8 @@ export interface CreateDeckInput {
   format?: DeckFormat;
   description?: string;
   visibility?: 'private' | 'unlisted' | 'public';
+  status?: DeckStatus;
+  primer?: string;
 }
 
 export interface CardEntryInput {
@@ -65,6 +67,8 @@ export async function createDeck(prisma: PrismaClient, userId: string, input: Cr
       format: input.format ?? 'commander',
       description: input.description ?? '',
       visibility: input.visibility ?? 'private',
+      status: input.status ?? 'brewing',
+      primer: input.primer ?? '',
     },
   });
 }
@@ -83,6 +87,8 @@ export async function updateDeck(
       format: patch.format,
       description: patch.description,
       visibility: patch.visibility,
+      status: patch.status,
+      primer: patch.primer,
     },
   });
 }

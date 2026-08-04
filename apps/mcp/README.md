@@ -12,13 +12,14 @@ favor cards you **already own**.
 | `search_cards` | Search the card DB with Scryfall-subset syntax (`c:`, `id:`, `t:`, `o:`, `cmc`, `f:`). |
 | `get_card` | Look up a card by name (exact then fuzzy) with recent printings. |
 | `list_decks` / `get_deck` | List/read your decks. |
-| `create_deck` / `add_cards_to_deck` / `import_deck` | Build and populate decks. |
+| `create_deck` / `update_deck` / `import_deck` | Create, update metadata (status/primer/…), or import a deck. |
+| `add_cards_to_deck` | Add cards (increments existing counts). |
 | `set_card_quantity` / `remove_card_from_deck` | Edit a deck in place — set exact quantity (upserts; 0 removes) or remove, by name/oracleId. |
 | `analyze_deck` | Mana curve, color pips, type split, price, and format legality. |
-| `get_inventory` / `add_inventory` | Read/add your card collection. |
+| `get_inventory` / `add_inventory` | Read (with used/free allocation) or add to your collection. |
 | `import_inventory_csv` | Bulk-import a ManaBox/Moxfield/Deckbox collection CSV. |
 | **`deck_inventory_diff`** | Owned vs. missing copies for a deck, plus cost to complete. |
-| **`find_owned_options`** | Cards you already own that match a query — bias deckbuilding toward your collection. |
+| **`find_owned_options`** | Cards you already own that match a query — bias deckbuilding toward your collection (`onlyFree` excludes cards committed to built decks). |
 
 ## Authentication
 
