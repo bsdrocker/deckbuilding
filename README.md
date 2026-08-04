@@ -4,7 +4,7 @@ An **API-first Magic: The Gathering deck-building platform**. Its defining featu
 a documented REST API **and** an MCP server, so Claude (or any tool) can read your
 decks, read your **card inventory**, and build/optimize decklists that favor cards
 you **already own**. Long-term goal is feature parity with Moxfield / Archidekt;
-this is **Milestone 1 — the core foundation**.
+**Milestones 1–4 are complete** (see the milestone notes below).
 
 ## What's here
 
@@ -129,9 +129,32 @@ card data imported.
   `and`/`or`, negated groups, and `is:` filters (`is:commander`, `is:permanent`,
   `is:vanilla`) on top of the existing operators.
 
-## Milestone 4+ (not yet built)
+## Milestone 4 (done) — deck UX + fuller grammar
+
+- **Delete decks** — from the deck list (per-row) and the deck detail header,
+  with an inline confirm. Deleting a deck never touches inventory (inventory has
+  no FK to a deck). Backend `DELETE /v1/decks/:id`.
+- **Click a card name → printing picker** — the card name opens the printing
+  (art) gallery across the deck, card search, and inventory views; the separate
+  picker button is gone.
+- **Card hover previews** — hovering a card name shows its image everywhere.
+- **Deck view grouped by type** — cards are grouped into Creatures, Planeswalkers,
+  Enchantments, Sorceries, Instants, Artifacts, Battles, Lands (with counts) and
+  sorted A–Z within each section.
+- **Remaining Scryfall grammar** — mana cost (`m:` contains / `m=` exact), set
+  (`s:` / `e:` / `set:`), release year (`year:` with `> < >= <=`), and
+  planeswalker loyalty (`loy:` / `loyalty:`). A backfilled `loyalty_num` column
+  supports the numeric loyalty filters.
+
+### Milestone 4.1 — card-name autocomplete
+
+- The deck **Add a card** field has a debounced typeahead (name + mana cost +
+  type), ordered by EDHREC rank so popular cards surface first, with keyboard and
+  mouse selection. It clears and refocuses after each add for fast entry. Reuses
+  the existing card search (`GET /v1/cards?orderBy=edhrec`).
+
+## Milestone 5+ (not yet built)
 
 Public deck browsing/social + shareable links, playtesting/sample hands, price
-history over time, collaborative decks, remaining Scryfall grammar (mana-cost
-`m:`, `set:`/`year:`, exotic `is:`, loyalty), and further UI polish toward full
+history over time, collaborative decks, and further UI polish toward full
 Moxfield/Archidekt parity.
