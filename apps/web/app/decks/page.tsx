@@ -28,6 +28,7 @@ export default async function DecksPage() {
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Status</th>
                 <th>Format</th>
                 <th>Colors</th>
                 <th>Cards</th>
@@ -39,6 +40,11 @@ export default async function DecksPage() {
                 <tr key={d.id}>
                   <td>
                     <Link href={`/decks/${d.id}`}>{d.name}</Link>
+                  </td>
+                  <td>
+                    <span className={`pill status-${d.status}`}>
+                      {d.status === 'built' ? '🔨 built' : '🧪 brewing'}
+                    </span>
                   </td>
                   <td className="muted">{d.format}</td>
                   <td>

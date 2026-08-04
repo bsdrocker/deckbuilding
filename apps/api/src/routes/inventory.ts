@@ -4,6 +4,7 @@ import {
   exportInventoryCsv,
   findOwnedOptions,
   importInventoryCsv,
+  inventoryAllocation,
   inventorySummary,
   inventoryValueBreakdown,
   listInventory,
@@ -29,10 +30,27 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
           offset: z.coerce.number().int().min(0).default(0),
           sort: z.enum(['name', 'set', 'value', 'recent']).default('name'),
           dir: z.enum(['asc', 'desc']).default('asc'),
+          filter: z.enum(['all', 'used', 'unused', 'conflict']).default('all'),
         }),
       },
     },
     async (req) => listInventory(app.prisma, req.user!.id, req.query),
+  );
+
+  r.get(
+    '/inventory/allocation',
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['inventory'],
+        summary: 'How owned cards are allocated to built decks (used/free + conflicts).',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    async (req) => {
+      const alloc = await inventoryAllocation(app.prisma, req.user!.id);
+      return { totals: alloc.totals, conflicts: alloc.conflicts };
+    },
   );
 
   r.get(
@@ -67,11 +85,18 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
         tags: ['inventory'],
         summary: 'Cards you already own that match a Scryfall-subset query (AI deckbuilding aid).',
         security: [{ bearerAuth: [] }],
-        querystring: z.object({ q: z.string().default(''), limit: z.coerce.number().int().min(1).max(200).default(50) }),
+        querystring: z.object({
+          q: z.string().default(''),
+          limit: z.coerce.number().int().min(1).max(200).default(50),
+          onlyFree: z.coerce.boolean().default(false),
+        }),
       },
     },
     async (req) => ({
-      options: await findOwnedOptions(app.prisma, req.user!.id, req.query.q, { limit: req.query.limit }),
+      options: await findOwnedOptions(app.prisma, req.user!.id, req.query.q, {
+        limit: req.query.limit,
+        onlyFree: req.query.onlyFree,
+      }),
     }),
   );
 

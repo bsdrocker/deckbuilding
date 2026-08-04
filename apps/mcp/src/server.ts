@@ -19,7 +19,9 @@ import {
   getDeck,
   importDeck,
   importInventoryCsv,
+  inventoryAllocation,
   inventorySummary,
+  updateDeck,
   listDecks,
   listInventory,
   parseDecklist,
@@ -162,6 +164,41 @@ async function main() {
   );
 
   server.registerTool(
+    'update_deck',
+    {
+      title: 'Update deck metadata',
+      description:
+        "Update a deck's metadata: name, format, description, visibility, status (brewing/built), and primer (Markdown writeup). Marking a deck 'built' makes its cards count as 'used' from your inventory.",
+      inputSchema: {
+        deckId: z.string(),
+        name: z.string().optional(),
+        format: z.enum(FORMATS).optional(),
+        description: z.string().optional(),
+        visibility: z.enum(['private', 'unlisted', 'public']).optional(),
+        status: z.enum(['brewing', 'built']).optional(),
+        primer: z.string().optional().describe('Long-form Markdown primer for the deck.'),
+      },
+    },
+    async ({ deckId, name, format, description, visibility, status, primer }) => {
+      try {
+        const user = await requireUser();
+        return json(
+          await updateDeck(prisma, deckId, user.id, {
+            name,
+            format,
+            description,
+            visibility,
+            status,
+            primer,
+          }),
+        );
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
     'add_cards_to_deck',
     {
       title: 'Add cards to a deck',
@@ -291,22 +328,31 @@ async function main() {
     'get_inventory',
     {
       title: 'Get inventory',
-      description: 'List the authenticated user\'s card inventory and a summary (distinct cards, copies, value).',
+      description:
+        "List the user's card inventory with a summary (distinct cards, copies, value) and allocation (how many copies are used by built decks vs. free). Filter by used/unused/conflict.",
       inputSchema: {
         limit: z.number().int().min(1).max(200).optional(),
         offset: z.number().int().min(0).optional(),
         sort: z.enum(['name', 'set', 'value', 'recent']).optional(),
         dir: z.enum(['asc', 'desc']).optional(),
+        filter: z.enum(['all', 'used', 'unused', 'conflict']).optional(),
       },
     },
-    async ({ limit, offset, sort, dir }) => {
+    async ({ limit, offset, sort, dir, filter }) => {
       try {
         const user = await requireUser();
-        const [list, summary] = await Promise.all([
-          listInventory(prisma, user.id, { limit, offset, sort, dir }),
+        const [list, summary, alloc] = await Promise.all([
+          listInventory(prisma, user.id, { limit, offset, sort, dir, filter }),
           inventorySummary(prisma, user.id),
+          inventoryAllocation(prisma, user.id),
         ]);
-        return json({ summary, total: list.total, items: list.items });
+        return json({
+          summary,
+          allocation: alloc.totals,
+          conflicts: alloc.conflicts.slice(0, 20),
+          total: list.total,
+          items: list.items,
+        });
       } catch (err) {
         return errorResult(err);
       }
@@ -385,13 +431,17 @@ async function main() {
     {
       title: 'Find owned cards matching a query',
       description:
-        'Surface cards you ALREADY OWN that match a Scryfall-subset query (e.g. "t:instant o:destroy id:r"). Use this while building a deck to prefer cards from the existing collection over buying new ones.',
-      inputSchema: { query: z.string(), limit: z.number().int().min(1).max(200).optional() },
+        'Surface cards you ALREADY OWN that match a Scryfall query (e.g. "t:instant o:destroy id:r"). Use this while building a deck to prefer cards from the existing collection. Set onlyFree to exclude cards already committed to BUILT decks — ideal for brewing a new deck without stealing from assembled ones.',
+      inputSchema: {
+        query: z.string(),
+        limit: z.number().int().min(1).max(200).optional(),
+        onlyFree: z.boolean().optional().describe('Only cards with copies not used by built decks.'),
+      },
     },
-    async ({ query, limit }) => {
+    async ({ query, limit, onlyFree }) => {
       try {
         const user = await requireUser();
-        const options = await findOwnedOptions(prisma, user.id, query, { limit });
+        const options = await findOwnedOptions(prisma, user.id, query, { limit, onlyFree });
         return json({
           count: options.length,
           options: options.map((o) => ({
@@ -402,6 +452,7 @@ async function main() {
             typeLine: o.typeLine,
             colorIdentity: o.colorIdentity,
             ownedQuantity: o.ownedQuantity,
+            freeQuantity: o.freeQuantity,
           })),
         });
       } catch (err) {

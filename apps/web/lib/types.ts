@@ -1,10 +1,13 @@
 /** Response shapes mirrored from the REST API (kept minimal for the UI). */
 
+export type DeckStatus = 'brewing' | 'built';
+
 export interface DeckListItem {
   id: string;
   name: string;
   format: string;
   visibility: string;
+  status: DeckStatus;
   colorIdentity: string[];
   updatedAt: string;
   cardCount: number;
@@ -47,6 +50,8 @@ export interface Deck {
   format: string;
   description: string;
   visibility: string;
+  status: DeckStatus;
+  primer: string;
   colorIdentity: string[];
   cards: DeckCard[];
 }
@@ -125,6 +130,18 @@ export interface InventorySummary {
   estimatedValueUsd: number;
 }
 
+export interface AllocationSummary {
+  totals: { ownedCopies: number; usedCopies: number; freeCopies: number; conflictCards: number };
+  conflicts: {
+    oracleId: string;
+    name: string;
+    owned: number;
+    used: number;
+    deficit: number;
+    decks: { id: string; name: string; quantity: number }[];
+  }[];
+}
+
 export interface InventoryItem {
   id: string;
   quantity: number;
@@ -133,6 +150,8 @@ export interface InventoryItem {
   language: string;
   unitUsd: number;
   totalUsd: number;
+  used: number;
+  free: number;
   printing: {
     scryfallId: string;
     setCode: string;

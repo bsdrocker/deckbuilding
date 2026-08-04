@@ -130,6 +130,18 @@ export async function addCardsAction(deckId: string, _prev: unknown, formData: F
   return { ok: true };
 }
 
+export async function updateDeckAction(
+  deckId: string,
+  patch: { name?: string; format?: string; description?: string; visibility?: string; status?: string; primer?: string },
+): Promise<{ error?: string; ok?: boolean }> {
+  const res = await apiFetch(`/v1/decks/${deckId}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.message ?? 'Update failed' };
+  }
+  return { ok: true };
+}
+
 export interface DeckCardPatch {
   quantity?: number;
   board?: string;

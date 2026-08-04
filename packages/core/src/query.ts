@@ -17,32 +17,31 @@ export interface ColorConstraint {
   values: Color[];
 }
 
-/**
- * One AND-clause of a card query. A {@link CardQuery} is an OR of clauses.
- * `*Excludes`/`*Excluded` fields are negations (`-t:creature`).
- */
-export interface CardClause {
-  nameIncludes: string[];
-  nameExcludes: string[];
-  typeIncludes: string[];
-  typeExcludes: string[];
-  oracleIncludes: string[];
-  oracleExcludes: string[];
-  keywords: string[];
-  keywordsExcluded: string[];
-  colors?: ColorConstraint;
-  colorsExcluded: Color[];
-  colorIdentity?: ColorConstraint;
-  cmc: NumericConstraint[];
-  power: NumericConstraint[];
-  toughness: NumericConstraint[];
-  rarity: string[];
-  legalIn?: string;
-}
+/** An atomic search condition (a leaf of the boolean expression tree). */
+export type Term =
+  | { kind: 'name'; value: string }
+  | { kind: 'type'; value: string }
+  | { kind: 'oracle'; value: string }
+  | { kind: 'keyword'; value: string }
+  | { kind: 'cmc'; c: NumericConstraint }
+  | { kind: 'power'; c: NumericConstraint }
+  | { kind: 'toughness'; c: NumericConstraint }
+  | { kind: 'colors'; c: ColorConstraint }
+  | { kind: 'identity'; c: ColorConstraint }
+  | { kind: 'rarity'; value: string }
+  | { kind: 'legal'; value: string }
+  | { kind: 'is'; value: string };
 
-/** A parsed query: card matches if ANY clause matches (OR). */
+/** Boolean expression over terms: `space` = AND, `or` = OR, `-`/`not` = NOT, `()` groups. */
+export type Expr =
+  | { op: 'and'; nodes: Expr[] }
+  | { op: 'or'; nodes: Expr[] }
+  | { op: 'not'; node: Expr }
+  | { op: 'term'; term: Term }
+  | { op: 'true' }; // empty query matches everything
+
 export interface CardQuery {
-  or: CardClause[];
+  root: Expr;
 }
 
 const COLOR_WORDS: Record<string, Color> = {
@@ -52,18 +51,6 @@ const COLOR_WORDS: Record<string, Color> = {
   r: 'R', red: 'R',
   g: 'G', green: 'G',
 };
-
-function emptyClause(): CardClause {
-  return {
-    nameIncludes: [], nameExcludes: [],
-    typeIncludes: [], typeExcludes: [],
-    oracleIncludes: [], oracleExcludes: [],
-    keywords: [], keywordsExcluded: [],
-    colorsExcluded: [],
-    cmc: [], power: [], toughness: [],
-    rarity: [],
-  };
-}
 
 function parseColors(raw: string): Color[] {
   const lower = raw.toLowerCase();
@@ -76,62 +63,48 @@ function parseColors(raw: string): Color[] {
   return out;
 }
 
-function splitOp(rest: string): { op: NumericOp; value: string } | null {
-  const m = rest.match(/^(>=|<=|=|>|<|:)(.+)$/);
-  if (!m) return null;
-  const op = m[1] === ':' ? '=' : (m[1] as NumericOp);
-  return { op, value: m[2]! };
-}
-
-// Tokenize on whitespace while keeping a quoted phrase attached to its token,
-// so `o:"destroy all"`, `-t:"legendary creature"`, and bare `"mob boss"` each
-// stay a single token (quotes stripped later by unquote()).
-function tokenize(query: string): string[] {
-  const tokens: string[] = [];
-  const re = /[^\s"]*"[^"]*"|[^\s"]+/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(query)) !== null) {
-    if (m[0]) tokens.push(m[0]);
-  }
-  return tokens;
-}
-
-/** Strip a single pair of surrounding double quotes, if present. */
 function unquote(s: string): string {
   return s.length >= 2 && s.startsWith('"') && s.endsWith('"') ? s.slice(1, -1) : s;
 }
 
+function splitOp(rest: string): { op: NumericOp; value: string } | null {
+  const m = rest.match(/^(>=|<=|=|>|<|:)(.+)$/);
+  if (!m) return null;
+  return { op: m[1] === ':' ? '=' : (m[1] as NumericOp), value: m[2]! };
+}
+
 const NUMERIC_KEYS = /^(cmc|mv|pow|power|tou|toughness)(>=|<=|=|>|<|:)/i;
-// Color / identity keys accept comparison operators (Scryfall style): id<=wb, c>=r.
 const COLOR_KEYS = /^(identity|colors?|ci|id|c)(<=|>=|=|<|>|:|!)/i;
 
-/** Map a raw color operator to a comparison. `:` defaults differ by key. */
 function colorOp(raw: string, isIdentity: boolean): NumericOp {
-  if (raw === ':') return isIdentity ? '<=' : '>='; // id: is subset, c: is contains
+  if (raw === ':') return isIdentity ? '<=' : '>='; // id: subset, c: contains
   if (raw === '!') return '=';
   return raw as NumericOp;
 }
 
-function applyToken(clause: CardClause, rawToken: string): void {
-  let token = rawToken;
-  let negate = false;
-  if (token.startsWith('-') && token.length > 1) {
-    negate = true;
-    token = token.slice(1);
-  }
+// ---------------------------------------------------------------------------
+// Tokenizer: parens are their own tokens; quoted phrases stay attached to a term.
+// ---------------------------------------------------------------------------
+function tokenize(query: string): string[] {
+  const tokens: string[] = [];
+  const re = /[()]|[^\s()"]*"[^"]*"|[^\s()]+/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(query)) !== null) if (m[0]) tokens.push(m[0]);
+  return tokens;
+}
 
+/** Build a single Term from a token string (no leading `-`). Null if unusable. */
+function parseTermString(token: string): Term | null {
   const numMatch = token.match(NUMERIC_KEYS);
   if (numMatch) {
     const key = numMatch[1]!.toLowerCase();
     const parsed = splitOp(token.slice(numMatch[1]!.length));
     const num = parsed ? Number(parsed.value) : NaN;
-    if (parsed && !Number.isNaN(num)) {
-      const constraint = { op: parsed.op, value: num };
-      if (key === 'cmc' || key === 'mv') clause.cmc.push(constraint);
-      else if (key === 'pow' || key === 'power') clause.power.push(constraint);
-      else clause.toughness.push(constraint);
-    }
-    return;
+    if (!parsed || Number.isNaN(num)) return null;
+    const c = { op: parsed.op, value: num };
+    if (key === 'cmc' || key === 'mv') return { kind: 'cmc', c };
+    if (key === 'pow' || key === 'power') return { kind: 'power', c };
+    return { kind: 'toughness', c };
   }
 
   const colorMatch = token.match(COLOR_KEYS);
@@ -140,92 +113,114 @@ function applyToken(clause: CardClause, rawToken: string): void {
     const rawOp = colorMatch[2]!;
     const values = parseColors(unquote(token.slice(colorMatch[1]!.length + rawOp.length)));
     const isIdentity = key === 'id' || key === 'identity' || key === 'ci';
-    if (!isIdentity && negate) {
-      clause.colorsExcluded.push(...values); // -c:r => not red
-      return;
-    }
-    const constraint: ColorConstraint = { op: colorOp(rawOp, isIdentity), values };
-    if (isIdentity) clause.colorIdentity = constraint;
-    else clause.colors = constraint;
-    return;
+    const c: ColorConstraint = { op: colorOp(rawOp, isIdentity), values };
+    return isIdentity ? { kind: 'identity', c } : { kind: 'colors', c };
   }
 
   const colon = token.indexOf(':');
   if (colon > 0) {
     const key = token.slice(0, colon).toLowerCase();
-    const value = unquote(token.slice(colon + 1));
+    const value = unquote(token.slice(colon + 1)).toLowerCase();
     switch (key) {
-      case 't':
-      case 'type':
-        (negate ? clause.typeExcludes : clause.typeIncludes).push(value.toLowerCase());
-        return;
-      case 'o':
-      case 'oracle':
-        (negate ? clause.oracleExcludes : clause.oracleIncludes).push(value.toLowerCase());
-        return;
-      case 'kw':
-      case 'keyword':
-        (negate ? clause.keywordsExcluded : clause.keywords).push(value.toLowerCase());
-        return;
-      case 'f':
-      case 'format':
-      case 'legal':
-        clause.legalIn = value.toLowerCase();
-        return;
-      case 'r':
-      case 'rarity':
-        clause.rarity.push(value.toLowerCase());
-        return;
-      default:
-        (negate ? clause.nameExcludes : clause.nameIncludes).push(unquote(token).toLowerCase());
-        return;
+      case 't': case 'type': return { kind: 'type', value };
+      case 'o': case 'oracle': return { kind: 'oracle', value };
+      case 'kw': case 'keyword': return { kind: 'keyword', value };
+      case 'f': case 'format': case 'legal': return { kind: 'legal', value };
+      case 'r': case 'rarity': return { kind: 'rarity', value };
+      case 'is': return { kind: 'is', value };
+      default: return { kind: 'name', value: unquote(token).toLowerCase() };
     }
   }
 
-  (negate ? clause.nameExcludes : clause.nameIncludes).push(unquote(token).toLowerCase());
+  return { kind: 'name', value: unquote(token).toLowerCase() };
+}
+
+// ---------------------------------------------------------------------------
+// Recursive-descent parser: OR > AND > NOT > atom. Space = implicit AND.
+// ---------------------------------------------------------------------------
+class Parser {
+  private i = 0;
+  constructor(private readonly toks: string[]) {}
+  private peek(): string | undefined {
+    return this.toks[this.i];
+  }
+  private next(): string | undefined {
+    return this.toks[this.i++];
+  }
+
+  parse(): Expr {
+    if (this.toks.length === 0) return { op: 'true' };
+    const e = this.parseOr();
+    return e;
+  }
+
+  private parseOr(): Expr {
+    const nodes = [this.parseAnd()];
+    while (this.peek()?.toLowerCase() === 'or') {
+      this.next();
+      nodes.push(this.parseAnd());
+    }
+    return nodes.length === 1 ? nodes[0]! : { op: 'or', nodes };
+  }
+
+  private parseAnd(): Expr {
+    const nodes: Expr[] = [];
+    for (;;) {
+      const t = this.peek();
+      if (t === undefined || t === ')' || t.toLowerCase() === 'or') break;
+      if (t.toLowerCase() === 'and') {
+        this.next();
+        continue;
+      }
+      nodes.push(this.parseNot());
+    }
+    if (nodes.length === 0) return { op: 'true' };
+    return nodes.length === 1 ? nodes[0]! : { op: 'and', nodes };
+  }
+
+  private parseNot(): Expr {
+    const t = this.peek();
+    if (t === '-' || t?.toLowerCase() === 'not') {
+      this.next();
+      return { op: 'not', node: this.parseNot() };
+    }
+    return this.parseAtom();
+  }
+
+  private parseAtom(): Expr {
+    const t = this.next();
+    if (t === undefined) return { op: 'true' };
+    if (t === '(') {
+      const inner = this.parseOr();
+      if (this.peek() === ')') this.next();
+      return inner;
+    }
+    // A term token may carry an attached leading `-` (negates just this term).
+    let str = t;
+    let negate = false;
+    if (str.startsWith('-') && str.length > 1) {
+      negate = true;
+      str = str.slice(1);
+    }
+    const term = parseTermString(str);
+    if (!term) return { op: 'true' };
+    const node: Expr = { op: 'term', term };
+    return negate ? { op: 'not', node } : node;
+  }
 }
 
 /**
- * Parse a subset of Scryfall query syntax into an OR of AND-clauses:
- *   c:/color: id:/identity: t:/type: o:/oracle: kw:/keyword: r:/rarity:
- *   cmc/mv/pow/tou (with >,<,>=,<=,=,:), f:/format:/legal:, bare words (name),
- *   "quoted phrases", `-` negation, and top-level `or`.
+ * Parse a Scryfall-style query into a boolean expression tree. Supports:
+ *   c:/id: (+ comparison ops), t:, o:, kw:, r:, f:, is:, cmc/pow/tou (with ops),
+ *   quoted phrases, `-`/`not` negation, `or`/`and`, and parenthesised grouping.
  */
 export function parseQuery(query: string): CardQuery {
-  const tokens = tokenize(query);
-  const clauses: CardClause[] = [];
-  let current = emptyClause();
-  let hasContent = false;
-
-  for (const token of tokens) {
-    if (token.toLowerCase() === 'or') {
-      clauses.push(current);
-      current = emptyClause();
-      hasContent = false;
-      continue;
-    }
-    applyToken(current, token);
-    hasContent = true;
-  }
-  clauses.push(current);
-  // Drop trailing empty clause from a dangling "or", keep at least one.
-  const nonEmpty = clauses.filter((c, i) => i === 0 || !isEmptyClause(c));
-  void hasContent;
-  return { or: nonEmpty.length ? nonEmpty : [emptyClause()] };
+  return { root: new Parser(tokenize(query)).parse() };
 }
 
-function isEmptyClause(c: CardClause): boolean {
-  return (
-    c.nameIncludes.length === 0 && c.nameExcludes.length === 0 &&
-    c.typeIncludes.length === 0 && c.typeExcludes.length === 0 &&
-    c.oracleIncludes.length === 0 && c.oracleExcludes.length === 0 &&
-    c.keywords.length === 0 && c.keywordsExcluded.length === 0 &&
-    c.colorsExcluded.length === 0 && !c.colors && !c.colorIdentity &&
-    c.cmc.length === 0 && c.power.length === 0 && c.toughness.length === 0 &&
-    c.rarity.length === 0 && !c.legalIn
-  );
-}
-
+// ---------------------------------------------------------------------------
+// Evaluation (in-memory)
+// ---------------------------------------------------------------------------
 function numMatches(value: number, c: NumericConstraint): boolean {
   switch (c.op) {
     case '=': return value === c.value;
@@ -242,12 +237,11 @@ function parseStat(raw: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Evaluate a color/identity comparison of the card's set against the query set. */
 function colorConstraintMatches(cardColors: string[], c: ColorConstraint): boolean {
   const S = new Set(cardColors);
   const Q = new Set<string>(c.values);
-  const subset = [...S].every((x) => Q.has(x)); // S ⊆ Q
-  const superset = [...Q].every((x) => S.has(x)); // S ⊇ Q
+  const subset = [...S].every((x) => Q.has(x));
+  const superset = [...Q].every((x) => S.has(x));
   switch (c.op) {
     case '<=': return subset;
     case '>=': return superset;
@@ -257,44 +251,63 @@ function colorConstraintMatches(cardColors: string[], c: ColorConstraint): boole
   }
 }
 
-function clauseMatches(card: CardData, clause: CardClause): boolean {
-  const name = card.name.toLowerCase();
+function isMatches(card: CardData, value: string): boolean {
   const type = card.typeLine.toLowerCase();
   const oracle = (card.oracleText ?? '').toLowerCase();
-  const keywords = (card.keywords ?? []).map((k) => k.toLowerCase());
-
-  if (!clause.nameIncludes.every((n) => name.includes(n))) return false;
-  if (clause.nameExcludes.some((n) => name.includes(n))) return false;
-  if (!clause.typeIncludes.every((t) => type.includes(t))) return false;
-  if (clause.typeExcludes.some((t) => type.includes(t))) return false;
-  if (!clause.oracleIncludes.every((o) => oracle.includes(o))) return false;
-  if (clause.oracleExcludes.some((o) => oracle.includes(o))) return false;
-  if (!clause.keywords.every((k) => keywords.includes(k))) return false;
-  if (clause.keywordsExcluded.some((k) => keywords.includes(k))) return false;
-  if (!clause.cmc.every((c) => numMatches(card.cmc, c))) return false;
-
-  const pow = parseStat(card.power);
-  if (clause.power.length && (pow === null || !clause.power.every((c) => numMatches(pow, c)))) return false;
-  const tou = parseStat(card.toughness);
-  if (clause.toughness.length && (tou === null || !clause.toughness.every((c) => numMatches(tou, c)))) return false;
-
-  if (clause.colors && !colorConstraintMatches(card.colors, clause.colors)) return false;
-  if (clause.colorsExcluded.length) {
-    const set = new Set(card.colors);
-    if (clause.colorsExcluded.some((c) => set.has(c))) return false;
+  switch (value) {
+    case 'commander':
+      return (
+        (type.includes('legendary') && type.includes('creature')) ||
+        oracle.includes('can be your commander')
+      );
+    case 'permanent':
+      return !type.includes('instant') && !type.includes('sorcery');
+    case 'spell':
+      return !type.includes('land');
+    case 'vanilla':
+      return type.includes('creature') && oracle.trim() === '';
+    default:
+      return false; // unknown is: filter matches nothing (never silently "all")
   }
-  if (clause.colorIdentity && !colorConstraintMatches(card.colorIdentity, clause.colorIdentity)) {
-    return false;
-  }
-  if (clause.legalIn) {
-    const l = card.legalities[clause.legalIn];
-    if (l !== 'legal' && l !== 'restricted') return false;
-  }
-  // Rarity is a printing-level concept; the in-memory predicate can't check it.
-  return true;
 }
 
-/** Evaluate a parsed query against a card in memory (OR of clauses). */
+function termMatches(card: CardData, term: Term): boolean {
+  switch (term.kind) {
+    case 'name': return card.name.toLowerCase().includes(term.value);
+    case 'type': return card.typeLine.toLowerCase().includes(term.value);
+    case 'oracle': return (card.oracleText ?? '').toLowerCase().includes(term.value);
+    case 'keyword': return (card.keywords ?? []).map((k) => k.toLowerCase()).includes(term.value);
+    case 'cmc': return numMatches(card.cmc, term.c);
+    case 'power': {
+      const p = parseStat(card.power);
+      return p !== null && numMatches(p, term.c);
+    }
+    case 'toughness': {
+      const t = parseStat(card.toughness);
+      return t !== null && numMatches(t, term.c);
+    }
+    case 'colors': return colorConstraintMatches(card.colors, term.c);
+    case 'identity': return colorConstraintMatches(card.colorIdentity, term.c);
+    case 'rarity': return false; // rarity is printing-level; not available in-memory
+    case 'legal': {
+      const l = card.legalities[term.value];
+      return l === 'legal' || l === 'restricted';
+    }
+    case 'is': return isMatches(card, term.value);
+  }
+}
+
+function evalExpr(card: CardData, e: Expr): boolean {
+  switch (e.op) {
+    case 'true': return true;
+    case 'term': return termMatches(card, e.term);
+    case 'not': return !evalExpr(card, e.node);
+    case 'and': return e.nodes.every((n) => evalExpr(card, n));
+    case 'or': return e.nodes.some((n) => evalExpr(card, n));
+  }
+}
+
+/** Evaluate a parsed query against a card in memory. */
 export function cardMatchesQuery(card: CardData, query: CardQuery): boolean {
-  return query.or.some((clause) => clauseMatches(card, clause));
+  return evalExpr(card, query.root);
 }

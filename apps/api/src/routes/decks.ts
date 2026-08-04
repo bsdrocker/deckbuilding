@@ -22,6 +22,7 @@ const FORMATS = [
 ] as const;
 const BOARDS = ['mainboard', 'sideboard', 'maybeboard', 'command'] as const;
 const VISIBILITY = ['private', 'unlisted', 'public'] as const;
+const STATUS = ['brewing', 'built'] as const;
 
 const cardEntry = z.object({
   oracleId: z.string().optional(),
@@ -53,6 +54,8 @@ export async function registerDeckRoutes(app: FastifyInstance) {
           format: z.enum(FORMATS).default('commander'),
           description: z.string().optional(),
           visibility: z.enum(VISIBILITY).default('private'),
+          status: z.enum(STATUS).optional(),
+          primer: z.string().optional(),
         }),
       },
     },
@@ -110,6 +113,8 @@ export async function registerDeckRoutes(app: FastifyInstance) {
           format: z.enum(FORMATS).optional(),
           description: z.string().optional(),
           visibility: z.enum(VISIBILITY).optional(),
+          status: z.enum(STATUS).optional(),
+          primer: z.string().optional(),
         }),
       },
     },

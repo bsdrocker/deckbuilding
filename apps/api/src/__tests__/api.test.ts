@@ -273,6 +273,87 @@ describe('API integration', () => {
     ).toBe(true);
   });
 
+  it('round-trips a deck primer and status', async () => {
+    const md = '# Plan\n\n- Ramp into **Krenko**\n- Go wide, then Impact Tremors';
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: `/v1/decks/${deckId}`,
+      headers: authed(),
+      payload: { primer: md, status: 'brewing' },
+    });
+    expect(patch.statusCode).toBe(200);
+    const deck = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
+    expect(deck.primer).toBe(md);
+    expect(deck.status).toBe('brewing');
+  });
+
+  it('marks a deck built and reflects inventory allocation', async () => {
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: `/v1/decks/${deckId}`,
+      headers: authed(),
+      payload: { status: 'built' },
+    });
+    expect(patch.json().status).toBe('built');
+
+    const alloc = (await app.inject({ method: 'GET', url: '/v1/inventory/allocation', headers: authed() })).json();
+    expect(alloc.totals.usedCopies).toBeGreaterThan(0);
+
+    const used = (await app.inject({ method: 'GET', url: '/v1/inventory?filter=used&limit=200', headers: authed() })).json();
+    expect(used.items.length).toBeGreaterThan(0);
+    expect(used.items.every((i: { used: number }) => i.used > 0)).toBe(true);
+    expect(used.items.some((i: { printing: { oracle: { name: string } } }) => i.printing.oracle.name === 'Sol Ring')).toBe(true);
+
+    const unused = (await app.inject({ method: 'GET', url: '/v1/inventory?filter=unused&limit=200', headers: authed() })).json();
+    expect(unused.items.every((i: { used: number }) => i.used === 0)).toBe(true);
+  });
+
+  it('detects an over-allocation conflict across built decks', async () => {
+    const d2 = (await app.inject({
+      method: 'POST',
+      url: '/v1/decks',
+      headers: authed(),
+      payload: { name: 'Conflict deck', format: 'commander' },
+    })).json();
+    await app.inject({
+      method: 'POST',
+      url: `/v1/decks/${d2.id}/cards`,
+      headers: authed(),
+      payload: { cards: [{ name: 'Sol Ring', quantity: 1 }] },
+    });
+    await app.inject({ method: 'PATCH', url: `/v1/decks/${d2.id}`, headers: authed(), payload: { status: 'built' } });
+
+    const alloc = (await app.inject({ method: 'GET', url: '/v1/inventory/allocation', headers: authed() })).json();
+    const sol = alloc.conflicts.find((c: { name: string }) => c.name === 'Sol Ring');
+    expect(sol).toBeDefined();
+    expect(sol.deficit).toBeGreaterThanOrEqual(1);
+    expect(sol.decks.length).toBeGreaterThanOrEqual(2);
+
+    await app.inject({ method: 'DELETE', url: `/v1/decks/${d2.id}`, headers: authed() });
+  });
+
+  it('supports is: and parenthesised grammar in search', async () => {
+    const cmd = (await app.inject({
+      method: 'GET',
+      url: '/v1/cards?q=' + encodeURIComponent('is:commander id:r') + '&limit=5',
+      headers: authed(),
+    })).json();
+    expect(cmd.total).toBeGreaterThan(0);
+    expect(
+      cmd.cards.every(
+        (c: { typeLine: string; oracleText: string | null }) =>
+          /legendary/i.test(c.typeLine) || /can be your commander/i.test(c.oracleText ?? ''),
+      ),
+    ).toBe(true);
+
+    const grouped = (await app.inject({
+      method: 'GET',
+      url: '/v1/cards?q=' + encodeURIComponent('(t:goblin or t:elf) c:r') + '&limit=5',
+      headers: authed(),
+    })).json();
+    expect(grouped.total).toBeGreaterThan(0);
+  });
+
   it('lists inventory with a total, pagination, and value sort', async () => {
     const res = await app.inject({
       method: 'GET',

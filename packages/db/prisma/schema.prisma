@@ -151,6 +151,13 @@ enum DeckBoard {
   command
 }
 
+/// brewing = a list you're considering (does not consume inventory);
+/// built = physically assembled (draws its cards down from inventory).
+enum DeckStatus {
+  brewing
+  built
+}
+
 model Deck {
   id             String         @id @default(cuid())
   userId         String         @map("user_id")
@@ -159,6 +166,8 @@ model Deck {
   format         DeckFormat     @default(commander)
   description    String         @default("")
   visibility     DeckVisibility @default(private)
+  status         DeckStatus     @default(brewing)
+  primer         String         @default("") // long-form Markdown writeup
   colorIdentity  String[]       @map("color_identity") // derived from cards
   commanderOracleId String?     @map("commander_oracle_id")
 
@@ -168,6 +177,7 @@ model Deck {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([userId])
+  @@index([userId, status])
   @@map("decks")
 }
 

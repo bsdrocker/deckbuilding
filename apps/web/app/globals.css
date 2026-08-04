@@ -117,6 +117,37 @@ button.secondary, .btn.secondary { background: var(--panel-2); color: var(--text
 .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; color: var(--muted); }
 .pill.ok { color: var(--accent-2); border-color: #2f5b34; }
 .pill.bad { color: var(--danger); border-color: #6b2f2f; }
+.pill.status-built { color: var(--accent-2); border-color: #2f5b34; }
+.pill.status-brewing { color: var(--warn); border-color: #6b5a2f; }
+.text-danger { color: var(--danger); }
+
+/* brewing/built toggle */
+.status-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+.status-opt { background: var(--panel-2); color: var(--muted); border: none; border-radius: 0; padding: 3px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.status-opt:hover { background: var(--border); filter: none; }
+.status-opt.active.brewing { background: var(--warn); color: #2a2410; }
+.status-opt.active.built { background: var(--accent-2); color: #0b1a0c; }
+
+/* segmented filter control */
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg-opt { padding: 3px 12px; font-size: 12px; color: var(--muted); text-decoration: none; background: var(--panel-2); border-right: 1px solid var(--border); }
+.seg-opt:last-child { border-right: none; }
+.seg-opt:hover { background: var(--border); text-decoration: none; }
+.seg-opt.active { background: var(--accent); color: #0b1020; font-weight: 700; }
+
+/* markdown primer */
+.markdown { line-height: 1.6; }
+.markdown h1, .markdown h2, .markdown h3 { color: var(--text); margin: 14px 0 8px; }
+.markdown h1 { font-size: 20px; } .markdown h2 { font-size: 16px; text-transform: none; letter-spacing: 0; color: var(--text); }
+.markdown p { margin: 8px 0; }
+.markdown ul, .markdown ol { padding-left: 22px; margin: 8px 0; }
+.markdown code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+.markdown pre { background: var(--panel-2); padding: 12px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--border); }
+.markdown pre code { background: none; padding: 0; }
+.markdown blockquote { border-left: 3px solid var(--border); margin: 8px 0; padding-left: 12px; color: var(--muted); }
+.markdown table { border-collapse: collapse; margin: 8px 0; }
+.markdown th, .markdown td { border: 1px solid var(--border); padding: 4px 8px; }
+.markdown a { color: var(--accent); }
 
 .curve { display: flex; align-items: flex-end; gap: 6px; height: 90px; }
 .curve .bar { flex: 1; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; position: relative; }

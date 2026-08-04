@@ -4,8 +4,14 @@ import {
   type InventoryDiff,
   type OwnedCard,
 } from '@deck/core';
-import type { OracleCard, PrismaClient } from '@deck/db';
+import type { OracleCard, Prisma, PrismaClient } from '@deck/db';
 import { stringify } from 'csv-stringify/sync';
+import {
+  inventoryAllocation,
+  oracleIdsForFilter,
+  type AllocationFilter,
+  type InventoryAllocation,
+} from './allocation.js';
 import { filterToOracleWhere } from './cards.js';
 import { loadDeck, toDeckData } from './deckData.js';
 import { ServiceError } from './errors.js';
@@ -54,41 +60,36 @@ export interface ListInventoryOptions {
   offset?: number;
   sort?: InventorySort;
   dir?: SortDir;
+  /** Restrict to cards used-by / free-of / in conflict with built decks. */
+  filter?: AllocationFilter;
 }
+
+type InventoryRow = Prisma.InventoryItemGetPayload<{ include: typeof INVENTORY_INCLUDE }>;
+type AnnotatedItem = InventoryRow & { unitUsd: number; totalUsd: number; used: number; free: number };
 
 export interface InventoryListResult {
   total: number;
-  items: Array<
-    Awaited<ReturnType<typeof loadInventoryPage>>['items'][number] & { unitUsd: number; totalUsd: number }
-  >;
+  items: AnnotatedItem[];
 }
 
-async function loadInventoryPage(
-  prisma: PrismaClient,
-  userId: string,
-  orderBy: unknown,
-  take: number,
-  skip: number,
-) {
-  const items = await prisma.inventoryItem.findMany({
-    where: { userId },
-    include: INVENTORY_INCLUDE,
-    orderBy: orderBy as never,
-    take,
-    skip,
-  });
-  return { items };
-}
-
-function withValue<T extends { quantity: number; finish: string; printing: { prices: unknown } }>(item: T) {
+function withValue(item: InventoryRow, alloc: InventoryAllocation): AnnotatedItem {
   const unit = finishPrice(item.printing.prices, item.finish) ?? 0;
-  return { ...item, unitUsd: Math.round(unit * 100) / 100, totalUsd: Math.round(unit * item.quantity * 100) / 100 };
+  const a = alloc.byOracle.get(item.printing.oracleId);
+  return {
+    ...item,
+    unitUsd: Math.round(unit * 100) / 100,
+    totalUsd: Math.round(unit * item.quantity * 100) / 100,
+    // used/free are ORACLE-level (shared across printings of the same card).
+    used: a?.used ?? 0,
+    free: a?.free ?? item.quantity,
+  };
 }
 
 /**
- * Paginated, sortable inventory listing. Sorting by name/set/recency is done in
- * the database; value sorting is finish-aware (not a DB column) so it loads the
- * user's rows and sorts in memory before paging.
+ * Paginated, sortable, filterable inventory listing. Sorting by name/set/recency
+ * is done in the database; value sorting is finish-aware (not a DB column) so it
+ * loads the rows and sorts in memory. Each item is annotated with its card's
+ * used/free allocation, and `filter` narrows to used/unused/conflict cards.
  */
 export async function listInventory(
   prisma: PrismaClient,
@@ -99,13 +100,22 @@ export async function listInventory(
   const offset = Math.max(opts.offset ?? 0, 0);
   const dir: SortDir = opts.dir === 'desc' ? 'desc' : 'asc';
   const sort = opts.sort ?? 'name';
+  const filter = opts.filter ?? 'all';
 
-  const total = await prisma.inventoryItem.count({ where: { userId } });
+  const alloc = await inventoryAllocation(prisma, userId);
+
+  const where: Prisma.InventoryItemWhereInput = { userId };
+  if (filter !== 'all') {
+    const ids = oracleIdsForFilter(alloc, filter);
+    if (ids.length === 0) return { total: 0, items: [] };
+    where.printing = { oracleId: { in: ids } };
+  }
+
+  const total = await prisma.inventoryItem.count({ where });
 
   if (sort === 'value') {
-    // Finish-aware value isn't a column — compute over all rows, sort, then page.
-    const all = await prisma.inventoryItem.findMany({ where: { userId }, include: INVENTORY_INCLUDE });
-    const valued = all.map(withValue);
+    const all = await prisma.inventoryItem.findMany({ where, include: INVENTORY_INCLUDE });
+    const valued = all.map((i) => withValue(i, alloc));
     valued.sort((a, b) => (dir === 'desc' ? b.totalUsd - a.totalUsd : a.totalUsd - b.totalUsd));
     return { total, items: valued.slice(offset, offset + limit) };
   }
@@ -117,8 +127,14 @@ export async function listInventory(
         ? [{ updatedAt: dir }]
         : [{ printing: { oracle: { name: dir } } }];
 
-  const { items } = await loadInventoryPage(prisma, userId, orderBy, limit, offset);
-  return { total, items: items.map(withValue) };
+  const items = await prisma.inventoryItem.findMany({
+    where,
+    include: INVENTORY_INCLUDE,
+    orderBy,
+    take: limit,
+    skip: offset,
+  });
+  return { total, items: items.map((i) => withValue(i, alloc)) };
 }
 
 export async function addInventory(
@@ -372,28 +388,42 @@ export async function deckInventoryDiff(
 
 export interface OwnedOption extends OracleCard {
   ownedQuantity: number;
+  freeQuantity: number; // owned copies not committed to built decks
 }
 
 /**
- * Surface cards the user ALREADY OWNS that match a Scryfall-subset query.
- * Lets AI deckbuilding answer "what removal / ramp / blue cards do I own that
- * fit this deck?" and prefer the collection over buying new cards.
+ * Surface cards the user ALREADY OWNS that match a Scryfall query. Lets AI
+ * deckbuilding answer "what removal / ramp / blue cards do I own that fit this
+ * deck?" and prefer the collection over buying new cards. With `onlyFree`, it
+ * excludes cards fully committed to built decks — ideal for brewing a NEW deck
+ * without stealing cards from ones you've physically assembled.
  */
 export async function findOwnedOptions(
   prisma: PrismaClient,
   userId: string,
   query: string,
-  opts: { limit?: number } = {},
+  opts: { limit?: number; onlyFree?: boolean } = {},
 ): Promise<OwnedOption[]> {
   const owned = await ownedByOracle(prisma, userId);
   if (owned.length === 0) return [];
   const ownedMap = new Map(owned.map((o) => [o.oracleId, o.quantity]));
 
+  const alloc = await inventoryAllocation(prisma, userId);
+  const freeOf = (oracleId: string) => alloc.byOracle.get(oracleId)?.free ?? (ownedMap.get(oracleId) ?? 0);
+
+  let candidateIds = [...ownedMap.keys()];
+  if (opts.onlyFree) candidateIds = candidateIds.filter((id) => freeOf(id) > 0);
+  if (candidateIds.length === 0) return [];
+
   const where = filterToOracleWhere(parseQuery(query));
   const cards = await prisma.oracleCard.findMany({
-    where: { AND: [where, { oracleId: { in: [...ownedMap.keys()] } }] },
+    where: { AND: [where, { oracleId: { in: candidateIds } }] },
     orderBy: { edhrecRank: 'asc' },
     take: Math.min(opts.limit ?? 50, 200),
   });
-  return cards.map((c) => ({ ...c, ownedQuantity: ownedMap.get(c.oracleId) ?? 0 }));
+  return cards.map((c) => ({
+    ...c,
+    ownedQuantity: ownedMap.get(c.oracleId) ?? 0,
+    freeQuantity: Math.max(0, freeOf(c.oracleId)),
+  }));
 }
