@@ -6,6 +6,13 @@ export type DeckWithCards = Prisma.DeckGetPayload<{
   include: { cards: { include: { oracle: true; printing: true } } };
 }>;
 
+export type PublicDeck = Prisma.DeckGetPayload<{
+  include: {
+    cards: { include: { oracle: true; printing: true } };
+    user: { select: { handle: true } };
+  };
+}>;
+
 /** Load a deck with its cards, oracle rows, and any preferred printing (art). */
 export async function loadDeck(
   prisma: PrismaClient,
@@ -14,6 +21,20 @@ export async function loadDeck(
   return prisma.deck.findUnique({
     where: { id: deckId },
     include: { cards: { include: { oracle: true, printing: true } } },
+  });
+}
+
+/** Load a deck by its public share handle, including the author's handle. */
+export async function loadDeckByShareId(
+  prisma: PrismaClient,
+  shareId: string,
+): Promise<PublicDeck | null> {
+  return prisma.deck.findUnique({
+    where: { shareId },
+    include: {
+      cards: { include: { oracle: true, printing: true } },
+      user: { select: { handle: true } },
+    },
   });
 }
 

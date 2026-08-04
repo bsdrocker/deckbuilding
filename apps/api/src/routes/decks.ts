@@ -1,6 +1,7 @@
 import {
   addCardsToDeck,
   analyzeDeck,
+  cloneDeck,
   createDeck,
   deckInventoryDiff,
   deleteDeck,
@@ -97,6 +98,23 @@ export async function registerDeckRoutes(app: FastifyInstance) {
     '/decks/:id',
     { preHandler: app.authenticate, schema: { tags: ['decks'], summary: 'Get a deck with its cards.', security: [{ bearerAuth: [] }], params: z.object({ id: z.string() }) } },
     async (req) => getDeck(app.prisma, req.params.id, req.user!.id),
+  );
+
+  r.post(
+    '/decks/clone',
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['decks'],
+        summary: 'Copy a shared deck (by share id) into your account as a private deck.',
+        security: [{ bearerAuth: [] }],
+        body: z.object({ shareId: z.string().min(1) }),
+      },
+    },
+    async (req, reply) => {
+      const clone = await cloneDeck(app.prisma, req.user!.id, req.body.shareId);
+      return reply.code(201).send(clone);
+    },
   );
 
   r.patch(

@@ -16,6 +16,7 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerCardRoutes } from './routes/cards.js';
 import { registerDeckRoutes } from './routes/decks.js';
 import { registerInventoryRoutes } from './routes/inventory.js';
+import { registerPublicRoutes } from './routes/public.js';
 
 // Augment Fastify with our decorators.
 declare module 'fastify' {
@@ -121,6 +122,7 @@ export async function buildApp(opts: { prismaClient?: PrismaClient } = {}): Prom
   await app.register(registerCardRoutes, { prefix: '/v1' });
   await app.register(registerDeckRoutes, { prefix: '/v1' });
   await app.register(registerInventoryRoutes, { prefix: '/v1' });
+  await app.register(registerPublicRoutes, { prefix: '/v1' });
 
   return app;
 }

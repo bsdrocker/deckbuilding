@@ -18,6 +18,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <Link href="/" className="brand">
             🃏 Deckbuilding
           </Link>
+          <Link href="/browse">Browse</Link>
           {authed && (
             <>
               <Link href="/decks">Decks</Link>

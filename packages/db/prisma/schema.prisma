@@ -167,6 +167,9 @@ model Deck {
   name           String
   format         DeckFormat     @default(commander)
   description    String         @default("")
+  // Opaque, URL-safe handle for sharing — distinct from the primary key so the
+  // internal id isn't exposed and the share link can be rotated later.
+  shareId        String         @unique @default(cuid()) @map("share_id")
   visibility     DeckVisibility @default(private)
   status         DeckStatus     @default(brewing)
   primer         String         @default("") // long-form Markdown writeup

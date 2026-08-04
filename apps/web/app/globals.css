@@ -241,6 +241,18 @@ button.danger:hover, .btn.danger:hover { background: #3a2020; filter: none; }
 .form-col { display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
 .field-label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
 .field-label select, .field-label input { color: var(--text); }
+
+/* Public deck browse grid. */
+.deck-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+.deck-card {
+  display: block; padding: 12px 14px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--panel-2); color: var(--text);
+}
+.deck-card:hover { border-color: var(--accent); text-decoration: none; }
+.deck-card-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .table { width: 100%; border-collapse: collapse; }
 .table th, .table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .table th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }

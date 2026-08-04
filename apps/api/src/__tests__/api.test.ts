@@ -165,6 +165,60 @@ describe('API integration', () => {
     expect(after.cards.find((c: { oracle: { name: string } }) => c.oracle.name === 'Lightning Bolt')).toBeUndefined();
   });
 
+  describe('public sharing', () => {
+    let shareId: string;
+    const setVisibility = (v: string) =>
+      app.inject({ method: 'PATCH', url: `/v1/decks/${deckId}`, headers: authed(), payload: { visibility: v } });
+    const browseNames = async () =>
+      (await app.inject({ method: 'GET', url: '/v1/public/decks?q=Test%20Krenko' })).json() as {
+        decks: { shareId: string }[];
+      };
+
+    it('exposes a shareId; a private deck 404s on the public endpoint', async () => {
+      const deck = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
+      expect(deck.shareId).toBeTruthy();
+      shareId = deck.shareId;
+      const res = await app.inject({ method: 'GET', url: `/v1/public/decks/${shareId}` });
+      expect(res.statusCode).toBe(404); // private by default
+    });
+
+    it('a public deck is readable without auth, hides ownerId, and appears in browse', async () => {
+      await setVisibility('public');
+      const res = await app.inject({ method: 'GET', url: `/v1/public/decks/${shareId}` });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.name).toBe('Test Krenko');
+      expect(body.authorHandle).toBeTruthy();
+      expect(body.userId).toBeUndefined();
+      expect(body.cards.length).toBeGreaterThan(0);
+      const browse = await browseNames();
+      expect(browse.decks.some((d) => d.shareId === shareId)).toBe(true);
+    });
+
+    it('an unlisted deck is readable by link but excluded from browse', async () => {
+      await setVisibility('unlisted');
+      const read = await app.inject({ method: 'GET', url: `/v1/public/decks/${shareId}` });
+      expect(read.statusCode).toBe(200);
+      const browse = await browseNames();
+      expect(browse.decks.some((d) => d.shareId === shareId)).toBe(false);
+    });
+
+    it('clones a shared deck into a private copy (auth required)', async () => {
+      await setVisibility('public');
+      const noAuth = await app.inject({ method: 'POST', url: '/v1/decks/clone', payload: { shareId } });
+      expect(noAuth.statusCode).toBe(401);
+
+      const res = await app.inject({ method: 'POST', url: '/v1/decks/clone', headers: authed(), payload: { shareId } });
+      expect(res.statusCode).toBe(201);
+      const cloneId = res.json().id;
+      const clone = (await app.inject({ method: 'GET', url: `/v1/decks/${cloneId}`, headers: authed() })).json();
+      expect(clone.visibility).toBe('private');
+      expect(clone.name).toContain('(copy)');
+      const original = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
+      expect(clone.cards.length).toBe(original.cards.length);
+    });
+  });
+
   it('imports a ManaBox-style CSV into inventory', async () => {
     const oracle = await prisma.oracleCard.findFirst({
       where: { name: { equals: 'Counterspell', mode: 'insensitive' } },

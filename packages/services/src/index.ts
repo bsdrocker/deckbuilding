@@ -5,6 +5,7 @@ export * from './prices.js';
 export * from './cards.js';
 export * from './deckData.js';
 export * from './decks.js';
+export * from './publicDecks.js';
 export * from './analysis.js';
 export * from './allocation.js';
 export * from './inventory.js';

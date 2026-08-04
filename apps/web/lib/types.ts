@@ -6,6 +6,7 @@ export interface DeckListItem {
   id: string;
   name: string;
   format: string;
+  shareId: string;
   visibility: string;
   status: DeckStatus;
   colorIdentity: string[];
@@ -49,11 +50,36 @@ export interface Deck {
   name: string;
   format: string;
   description: string;
+  shareId: string;
   visibility: string;
   status: DeckStatus;
   primer: string;
   colorIdentity: string[];
   cards: DeckCard[];
+}
+
+/** A shared deck as returned by the public endpoints (no owner/inventory data). */
+export interface PublicDeck {
+  shareId: string;
+  name: string;
+  format: string;
+  visibility: string;
+  status: DeckStatus;
+  primer: string;
+  colorIdentity: string[];
+  authorHandle: string;
+  cards: DeckCard[];
+}
+
+export interface PublicDeckSummary {
+  shareId: string;
+  name: string;
+  format: string;
+  colorIdentity: string[];
+  status: DeckStatus;
+  cardCount: number;
+  updatedAt: string;
+  authorHandle: string;
 }
 
 export interface ManaCurveBucket {
