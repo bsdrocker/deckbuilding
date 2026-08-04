@@ -112,6 +112,34 @@ export async function addInventoryByNameAction(
   return { ok: true, message: `Added ${quantity}× ${card.name}` };
 }
 
+export interface CardSuggestion {
+  oracleId: string;
+  name: string;
+  manaCost: string | null;
+  typeLine: string;
+  imageUrl: string | null;
+}
+
+/**
+ * Typeahead suggestions for the deck "Add a card" field. Reuses the card search
+ * (a bare word matches names) ordered by EDHREC rank so popular cards surface
+ * first. Returns a small trimmed list; empty for very short queries.
+ */
+export async function searchCardNamesAction(query: string): Promise<CardSuggestion[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const res = await apiFetch(`/v1/cards?q=${encodeURIComponent(q)}&limit=8&orderBy=edhrec`);
+  if (!res.ok) return [];
+  const data = (await res.json()) as { cards?: Array<Record<string, unknown>> };
+  return (data.cards ?? []).map((c) => ({
+    oracleId: String(c.oracleId),
+    name: String(c.name),
+    manaCost: (c.manaCost as string | null) ?? null,
+    typeLine: String(c.typeLine ?? ''),
+    imageUrl: (c.imageUris as { small?: string; normal?: string } | null)?.small ?? null,
+  }));
+}
+
 export async function addCardsAction(deckId: string, _prev: unknown, formData: FormData): Promise<{ error?: string; ok?: boolean }> {
   const name = String(formData.get('name') ?? '');
   const quantity = Number(formData.get('quantity') ?? 1);
