@@ -73,16 +73,22 @@ function splitOp(rest: string): { op: NumericOp; value: string } | null {
   return { op, value: m[2]! };
 }
 
-// Tokenize on whitespace but keep "quoted phrases" (and -"negated phrases") intact.
+// Tokenize on whitespace while keeping a quoted phrase attached to its token,
+// so `o:"destroy all"`, `-t:"legendary creature"`, and bare `"mob boss"` each
+// stay a single token (quotes stripped later by unquote()).
 function tokenize(query: string): string[] {
   const tokens: string[] = [];
-  const re = /(-?)"([^"]*)"|(\S+)/g;
+  const re = /[^\s"]*"[^"]*"|[^\s"]+/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(query)) !== null) {
-    if (m[2] !== undefined) tokens.push(`${m[1]}${m[2]}`);
-    else tokens.push(m[3]!);
+    if (m[0]) tokens.push(m[0]);
   }
   return tokens;
+}
+
+/** Strip a single pair of surrounding double quotes, if present. */
+function unquote(s: string): string {
+  return s.length >= 2 && s.startsWith('"') && s.endsWith('"') ? s.slice(1, -1) : s;
 }
 
 const NUMERIC_KEYS = /^(cmc|mv|pow|power|tou|toughness)(>=|<=|=|>|<|:)/i;
@@ -112,7 +118,7 @@ function applyToken(clause: CardClause, rawToken: string): void {
   const colon = token.indexOf(':');
   if (colon > 0) {
     const key = token.slice(0, colon).toLowerCase();
-    const value = token.slice(colon + 1);
+    const value = unquote(token.slice(colon + 1));
     switch (key) {
       case 'c':
       case 'color':
@@ -149,12 +155,12 @@ function applyToken(clause: CardClause, rawToken: string): void {
         clause.rarity.push(value.toLowerCase());
         return;
       default:
-        (negate ? clause.nameExcludes : clause.nameIncludes).push(token.toLowerCase());
+        (negate ? clause.nameExcludes : clause.nameIncludes).push(unquote(token).toLowerCase());
         return;
     }
   }
 
-  (negate ? clause.nameExcludes : clause.nameIncludes).push(token.toLowerCase());
+  (negate ? clause.nameExcludes : clause.nameIncludes).push(unquote(token).toLowerCase());
 }
 
 /**

@@ -29,6 +29,20 @@ describe('parseQuery', () => {
     expect(f.toughness).toEqual([{ op: '<', value: 5 }]);
   });
 
+  it('keeps a quoted phrase attached to its operator', () => {
+    const q = parseQuery('o:"destroy all" t:creature');
+    const f = q.or[0]!;
+    expect(f.oracleIncludes).toEqual(['destroy all']);
+    expect(f.typeIncludes).toEqual(['creature']);
+  });
+
+  it('supports negated quoted phrases and bare quoted names', () => {
+    const q = parseQuery('-o:"draw a card" "mob boss"');
+    const f = q.or[0]!;
+    expect(f.oracleExcludes).toEqual(['draw a card']);
+    expect(f.nameIncludes).toEqual(['mob boss']);
+  });
+
   it('splits top-level OR into multiple clauses', () => {
     const q = parseQuery('t:goblin or kw:flying');
     expect(q.or).toHaveLength(2);

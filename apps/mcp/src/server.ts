@@ -23,7 +23,9 @@ import {
   listDecks,
   listInventory,
   parseDecklist,
+  removeDeckCardBySelector,
   searchCards,
+  setDeckCardQuantity,
   type AuthUser,
 } from '@deck/services';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -183,6 +185,63 @@ async function main() {
       try {
         const user = await requireUser();
         return json(await addCardsToDeck(prisma, deckId, user.id, cards));
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'set_card_quantity',
+    {
+      title: 'Set a deck card quantity',
+      description:
+        'Set the exact quantity of a card in a deck (0 removes it). Identify the card by name, oracleId, or cardId; pass board when the card exists on more than one board. Use this for swaps and trimming — add_cards_to_deck only increments.',
+      inputSchema: {
+        deckId: z.string(),
+        quantity: z.number().int().min(0),
+        name: z.string().optional(),
+        oracleId: z.string().optional(),
+        cardId: z.string().optional(),
+        board: z.enum(BOARDS).optional(),
+      },
+    },
+    async ({ deckId, quantity, name, oracleId, cardId, board }) => {
+      try {
+        const user = await requireUser();
+        const result = await setDeckCardQuantity(
+          prisma,
+          deckId,
+          user.id,
+          { name, oracleId, cardId, board },
+          quantity,
+        );
+        return json(result ?? { removed: true });
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'remove_card_from_deck',
+    {
+      title: 'Remove a card from a deck',
+      description:
+        'Remove a card from a deck entirely. Identify it by name, oracleId, or cardId; pass board when it exists on more than one board.',
+      inputSchema: {
+        deckId: z.string(),
+        name: z.string().optional(),
+        oracleId: z.string().optional(),
+        cardId: z.string().optional(),
+        board: z.enum(BOARDS).optional(),
+      },
+    },
+    async ({ deckId, name, oracleId, cardId, board }) => {
+      try {
+        const user = await requireUser();
+        await removeDeckCardBySelector(prisma, deckId, user.id, { name, oracleId, cardId, board });
+        return json({ removed: true });
       } catch (err) {
         return errorResult(err);
       }
