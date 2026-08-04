@@ -34,13 +34,29 @@ function isLand(typeLine: string): boolean {
   return /\bLand\b/.test(typeLine);
 }
 
-/** First matching primary type from the type line (Land wins so it isn't double-counted). */
-function primaryType(typeLine: string): string {
+/**
+ * First matching primary type from the type line (Land wins so it isn't
+ * double-counted). Returns one of PRIMARY_TYPES or 'Other'.
+ */
+export function cardTypeCategory(typeLine: string): string {
   for (const t of PRIMARY_TYPES) {
     if (new RegExp(`\\b${t}\\b`).test(typeLine)) return t;
   }
   return 'Other';
 }
+
+/** Display order for grouping a deck's cards into type sections. */
+export const DECK_TYPE_ORDER = [
+  'Creature',
+  'Planeswalker',
+  'Enchantment',
+  'Sorcery',
+  'Instant',
+  'Artifact',
+  'Battle',
+  'Land',
+  'Other',
+] as const;
 
 /** Count colored pips in a mana cost string like "{2}{W}{W}{U}". Hybrid pips count each color. */
 export function countPips(manaCost: string | null): Record<Color, number> {
@@ -73,7 +89,7 @@ export function computeDeckStats(deck: DeckData): DeckStats {
     totalCards += q;
     totalPrice += (dc.card.priceUsd ?? 0) * q;
 
-    const type = primaryType(dc.card.typeLine);
+    const type = cardTypeCategory(dc.card.typeLine);
     typeDist[type] = (typeDist[type] ?? 0) + q;
 
     if (isLand(dc.card.typeLine)) {

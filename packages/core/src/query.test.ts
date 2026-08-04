@@ -82,6 +82,41 @@ describe('cardMatchesQuery — boolean grammar', () => {
   });
 });
 
+describe('cardMatchesQuery — mana / loyalty', () => {
+  it('m: matches costs that contain the given symbols (order-insensitive)', () => {
+    expect(m('m:RR')(CARDS.krenko)).toBe(true); // {2}{R}{R} contains {R}{R}
+    expect(m('m:R')(CARDS.krenko)).toBe(true);
+    expect(m('m:WW')(CARDS.krenko)).toBe(false);
+    expect(m('m:{2}{R}')(CARDS.krenko)).toBe(true);
+  });
+
+  it('m= requires an exact cost (counts and all)', () => {
+    expect(m('m=2RR')(CARDS.krenko)).toBe(true); // {2}{R}{R}
+    expect(m('m=RR')(CARDS.krenko)).toBe(false); // missing the {2}
+    expect(m('m=R')(CARDS.lightningBolt)).toBe(true);
+  });
+
+  it('loy: filters planeswalker loyalty numerically', () => {
+    expect(m('loy>=3')(CARDS.jaceBeleren)).toBe(true);
+    expect(m('loy>3')(CARDS.jaceBeleren)).toBe(false);
+    expect(m('loyalty=3')(CARDS.jaceBeleren)).toBe(true);
+    expect(m('loy>=1')(CARDS.krenko)).toBe(false); // no loyalty
+  });
+});
+
+describe('parseQuery — printing-level terms', () => {
+  it('parses set and year into terms', () => {
+    const set = parseQuery('s:znr').root;
+    expect(set).toEqual({ op: 'term', term: { kind: 'set', value: 'znr' } });
+    const year = parseQuery('year>=2020').root;
+    expect(year).toEqual({ op: 'term', term: { kind: 'year', c: { op: '>=', value: 2020 } } });
+  });
+  it('set/year do not match in-memory (printing-level)', () => {
+    expect(m('s:znr')(CARDS.krenko)).toBe(false);
+    expect(m('year>=2020')(CARDS.krenko)).toBe(false);
+  });
+});
+
 describe('cardMatchesQuery — is: and legality', () => {
   it('is:commander matches legendary creatures', () => {
     expect(m('is:commander')(CARDS.krenko)).toBe(true); // Legendary Creature

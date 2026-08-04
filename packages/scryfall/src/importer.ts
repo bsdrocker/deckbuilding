@@ -36,6 +36,7 @@ function oracleWriteData(o: MappedOracle) {
     loyalty: o.loyalty,
     powerNum: o.powerNum,
     toughnessNum: o.toughnessNum,
+    loyaltyNum: o.loyaltyNum,
   };
 }
 

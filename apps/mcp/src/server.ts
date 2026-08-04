@@ -73,7 +73,7 @@ async function main() {
     {
       title: 'Search cards',
       description:
-        'Search the card database using Scryfall-subset syntax (c:, id:, t:, o:, cmc/mv with >,<,>=,<=, f:, and bare words for names).',
+        'Search the card database using Scryfall-subset syntax (c:, id:, t:, o:, kw:, r:, m: mana cost, s:/set:, cmc/mv/pow/tou/loy/year with >,<,>=,<=, f:, is:, and bare words for names).',
       inputSchema: {
         query: z.string().describe('Scryfall-subset query, e.g. "t:creature c:r cmc<=3 f:commander".'),
         limit: z.number().int().min(1).max(175).optional(),

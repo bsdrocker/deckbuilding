@@ -60,23 +60,19 @@ export function DeckCardRow({ deckId, card }: { deckId: string; card: DeckCard }
             +
           </button>
         </span>
-        <span className="card-name">
+        <button
+          type="button"
+          className="card-name-btn"
+          title="Choose printing (art)"
+          onClick={() => setPickingArt(true)}
+          disabled={pending}
+        >
           <CardHover name={card.oracle.name} imageUrl={imageUrl} />
-        </span>
+        </button>
       </span>
 
       <span className="row" style={{ gap: 8 }}>
         <span className="muted mana">{card.oracle.manaCost ?? ''}</span>
-        <button
-          type="button"
-          className="art-btn"
-          title="Choose printing (art)"
-          aria-label="Choose printing"
-          onClick={() => setPickingArt(true)}
-          disabled={pending}
-        >
-          🎨
-        </button>
         <select
           className="board-select"
           value={card.board}

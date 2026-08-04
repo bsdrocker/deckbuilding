@@ -95,4 +95,16 @@ export const CARDS = {
     legalities: { commander: 'legal', modern: 'legal' },
     priceUsd: 0.5,
   }),
+  jaceBeleren: makeCard({
+    oracleId: 'jace-beleren',
+    name: 'Jace Beleren',
+    manaCost: '{1}{U}{U}',
+    cmc: 3,
+    typeLine: 'Legendary Planeswalker — Jace',
+    colors: ['U'],
+    colorIdentity: ['U'],
+    loyalty: '3',
+    legalities: { commander: 'legal', modern: 'legal' },
+    priceUsd: 4.0,
+  }),
 };

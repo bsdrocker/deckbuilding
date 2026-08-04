@@ -22,6 +22,7 @@ export interface MappedOracle {
   loyalty: string | null;
   powerNum: number | null;
   toughnessNum: number | null;
+  loyaltyNum: number | null;
 }
 
 export interface MappedPrinting {
@@ -95,6 +96,7 @@ export function mapCard(card: ScryfallCard): { oracle: MappedOracle; printing: M
     loyalty: faceStat(card, 'loyalty'),
     powerNum: numeric(faceStat(card, 'power')),
     toughnessNum: numeric(faceStat(card, 'toughness')),
+    loyaltyNum: numeric(faceStat(card, 'loyalty')),
   };
 
   const printing: MappedPrinting = {

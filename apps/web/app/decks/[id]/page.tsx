@@ -2,12 +2,14 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import type { Deck, DeckAnalysis, DeckCard, InventoryDiff } from '@/lib/types';
+import { cardTypeCategory, DECK_TYPE_ORDER } from '@/lib/cardTypes';
 import { ColorDots } from '@/components/ColorDots';
 import { ManaCurve } from '@/components/ManaCurve';
 import { AddCardForm } from './AddCardForm';
 import { DeckCardRow } from './DeckCardRow';
 import { DeckStatusToggle } from './DeckStatusToggle';
 import { PrimerSection } from './PrimerSection';
+import { DeleteDeckButton } from '../DeleteDeckButton';
 
 const BOARD_LABELS: Record<string, string> = {
   command: 'Command Zone',
@@ -17,12 +19,41 @@ const BOARD_LABELS: Record<string, string> = {
 };
 const BOARD_ORDER = ['command', 'mainboard', 'sideboard', 'maybeboard'];
 
+const TYPE_LABELS: Record<string, string> = {
+  Creature: 'Creatures',
+  Planeswalker: 'Planeswalkers',
+  Enchantment: 'Enchantments',
+  Sorcery: 'Sorceries',
+  Instant: 'Instants',
+  Artifact: 'Artifacts',
+  Battle: 'Battles',
+  Land: 'Lands',
+  Other: 'Other',
+};
+
+interface TypeSection {
+  type: string;
+  cards: DeckCard[];
+  count: number;
+}
+
+/** Group a board's cards into type sections (DECK_TYPE_ORDER), cards A-Z within each. */
+function groupByType(cards: DeckCard[]): TypeSection[] {
+  const byType: Record<string, DeckCard[]> = {};
+  for (const c of cards) (byType[cardTypeCategory(c.oracle.typeLine)] ??= []).push(c);
+  const sections: TypeSection[] = [];
+  for (const type of DECK_TYPE_ORDER) {
+    const group = byType[type];
+    if (!group?.length) continue;
+    group.sort((a, b) => a.oracle.name.localeCompare(b.oracle.name));
+    sections.push({ type, cards: group, count: group.reduce((s, c) => s + c.quantity, 0) });
+  }
+  return sections;
+}
+
 function groupByBoard(cards: DeckCard[]) {
   const groups: Record<string, DeckCard[]> = {};
   for (const c of cards) (groups[c.board] ??= []).push(c);
-  for (const board of Object.keys(groups)) {
-    groups[board]!.sort((a, b) => a.oracle.cmc - b.oracle.cmc || a.oracle.name.localeCompare(b.oracle.name));
-  }
   return groups;
 }
 
@@ -60,9 +91,12 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
             <DeckStatusToggle deckId={deck.id} status={deck.status} />
           </div>
         </div>
-        <Link href="/decks" className="btn secondary">
-          ← All decks
-        </Link>
+        <div className="row" style={{ gap: 8 }}>
+          <Link href="/decks" className="btn secondary">
+            ← All decks
+          </Link>
+          <DeleteDeckButton deckId={deck.id} deckName={deck.name} redirectTo="/decks" />
+        </div>
       </div>
 
       <div className="deck-layout">
@@ -79,15 +113,22 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
               <p className="muted">No cards yet — add some above.</p>
             ) : (
               BOARD_ORDER.filter((b) => groups[b]?.length).map((board) => (
-                <div key={board}>
+                <div key={board} className="board-group">
                   <h3>
                     {BOARD_LABELS[board]} ({groups[board]!.reduce((s, c) => s + c.quantity, 0)})
                   </h3>
-                  <ul className="card-list">
-                    {groups[board]!.map((c) => (
-                      <DeckCardRow key={c.id} deckId={deck.id} card={c} />
-                    ))}
-                  </ul>
+                  {groupByType(groups[board]!).map((section) => (
+                    <div key={section.type} className="type-section">
+                      <h4 className="type-heading">
+                        {TYPE_LABELS[section.type] ?? section.type} ({section.count})
+                      </h4>
+                      <ul className="card-list">
+                        {section.cards.map((c) => (
+                          <DeckCardRow key={c.id} deckId={deck.id} card={c} />
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
                 </div>
               ))
             )}

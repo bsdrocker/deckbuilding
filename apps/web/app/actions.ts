@@ -235,6 +235,16 @@ export async function updateInventoryAction(
   return { ok: true };
 }
 
+/** Delete a deck (and its card list). Does not touch inventory. */
+export async function deleteDeckAction(deckId: string): Promise<{ error?: string; ok?: boolean }> {
+  const res = await apiFetch(`/v1/decks/${deckId}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 204) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.message ?? 'Delete failed' };
+  }
+  return { ok: true };
+}
+
 export async function deleteInventoryAction(id: string): Promise<{ error?: string; ok?: boolean }> {
   const res = await apiFetch(`/v1/inventory/${id}`, { method: 'DELETE' });
   if (!res.ok && res.status !== 204) {

@@ -4,6 +4,10 @@ export interface ParsedDeckLine {
   quantity: number;
   name: string;
   board: Board;
+  /** Set code from a "(SET) 123" annotation, if present (upper-cased). */
+  setCode?: string;
+  /** Collector number from a "(SET) 123" annotation, if present. */
+  collectorNumber?: string;
 }
 
 /**
@@ -11,8 +15,14 @@ export interface ParsedDeckLine {
  *   "4 Lightning Bolt", "4x Lightning Bolt", "1 Sol Ring (C21) 263"
  * Section headers switch boards: lines like "Sideboard", "Commander", "Maybeboard",
  * or "Deck"/"Mainboard". Blank lines and comments (# / //) are ignored.
- * Set/collector-number annotations in parentheses/brackets are stripped — we
- * resolve by name at the oracle level.
+ *
+ * A trailing "(SET) 123" / "[SET] 123" annotation is captured (setCode +
+ * collectorNumber) so resolution can go through the exact printing — this is how
+ * flavor-named reprints (e.g. Secret Lair "Adamantium Bonding Tank" = The Ozolith)
+ * get matched, since their name alone isn't in the oracle table. Foil/etched
+ * markers like "*F*" are stripped. Double-faced names written with a single slash
+ * ("Miles Morales / Ultimate Spider-Man") are normalized to the "//" the oracle
+ * table stores.
  */
 export function parseDecklist(text: string): ParsedDeckLine[] {
   const lines = text.split(/\r?\n/);
@@ -44,12 +54,29 @@ export function parseDecklist(text: string): ParsedDeckLine[] {
     const m = line.match(/^(\d+)\s*[xX]?\s+(.+)$/);
     if (!m) continue;
     const quantity = Number(m[1]);
-    let name = m[2]!.trim();
-    // Strip trailing "(SET) 123" / "[SET]" annotations.
-    name = name.replace(/\s*[([][A-Za-z0-9]{2,6}[)\]].*$/, '').trim();
-    if (!name || !Number.isFinite(quantity) || quantity <= 0) continue;
+    if (!Number.isFinite(quantity) || quantity <= 0) continue;
 
-    out.push({ quantity, name, board });
+    let rest = m[2]!.trim();
+
+    // Strip trailing finish markers ("*F*", "*E*", "*etched*", possibly repeated).
+    rest = rest.replace(/(?:\s*\*[^*]*\*)+\s*$/, '').trim();
+
+    // Capture a trailing "(SET) collector" / "[SET] collector" annotation.
+    // Collector numbers can carry letters/dashes (e.g. "OTC-303", "180a").
+    let setCode: string | undefined;
+    let collectorNumber: string | undefined;
+    const ann = rest.match(/^(.*?)\s*[([]([A-Za-z0-9]{2,6})[)\]](?:\s+([A-Za-z0-9][A-Za-z0-9-]*))?\s*$/);
+    if (ann && ann[1]!.trim()) {
+      rest = ann[1]!.trim();
+      setCode = ann[2]!.toUpperCase();
+      collectorNumber = ann[3];
+    }
+
+    // Normalize double-faced names to the "//" separator the oracle table uses.
+    let name = rest.replace(/\s*\/\/?\s*/g, ' // ').trim();
+    if (!name) continue;
+
+    out.push({ quantity, name, board, setCode, collectorNumber });
   }
 
   return out;
