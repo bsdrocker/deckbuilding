@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { prisma } from '@deck/db';
-import { parseDecklist } from '@deck/services';
+import { parseDecklist, removeDeckCardBySelector, setDeckCardQuantity } from '@deck/services';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
@@ -214,6 +214,41 @@ describe('API integration', () => {
     expect(csv.statusCode).toBe(200);
     expect(csv.headers['content-type']).toContain('text/csv');
     expect(csv.body).toContain('Scryfall ID');
+  });
+
+  it('sets and removes deck cards by name (MCP swap workflow)', async () => {
+    const deckCards = () =>
+      app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() }).then((r) => r.json().cards);
+    const findShock = (cards: { oracle: { name: string }; quantity: number }[]) =>
+      cards.find((c) => c.oracle.name === 'Shock');
+
+    await app.inject({
+      method: 'POST',
+      url: `/v1/decks/${deckId}/cards`,
+      headers: authed(),
+      payload: { cards: [{ name: 'Shock', quantity: 1 }] },
+    });
+
+    // set exact quantity by name
+    await setDeckCardQuantity(prisma, deckId, userId, { name: 'Shock' }, 3);
+    expect(findShock(await deckCards())?.quantity).toBe(3);
+
+    // remove by name
+    await removeDeckCardBySelector(prisma, deckId, userId, { name: 'Shock' });
+    expect(findShock(await deckCards())).toBeUndefined();
+
+    // setting quantity 0 also removes
+    await app.inject({
+      method: 'POST',
+      url: `/v1/decks/${deckId}/cards`,
+      headers: authed(),
+      payload: { cards: [{ name: 'Shock', quantity: 2 }] },
+    });
+    await setDeckCardQuantity(prisma, deckId, userId, { name: 'Shock' }, 0);
+    expect(findShock(await deckCards())).toBeUndefined();
+
+    // unknown card is a clear error
+    await expect(setDeckCardQuantity(prisma, deckId, userId, { name: 'NotARealCard_zzz' }, 2)).rejects.toThrow();
   });
 
   it('lists inventory with a total, pagination, and value sort', async () => {

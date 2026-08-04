@@ -217,6 +217,68 @@ export async function removeDeckCard(
   await refreshColorIdentity(prisma, deckId);
 }
 
+export interface DeckCardSelector {
+  /** Directly by deck-card id, or by oracleId / name (+ optional board). */
+  cardId?: string;
+  oracleId?: string;
+  name?: string;
+  board?: Board;
+}
+
+/**
+ * Resolve a {@link DeckCardSelector} to a concrete deck-card id. When a card
+ * exists on multiple boards and no board is given, prefers mainboard, then
+ * command. Returns null if nothing matches.
+ */
+export async function resolveDeckCardId(
+  prisma: PrismaClient,
+  deckId: string,
+  selector: DeckCardSelector,
+): Promise<string | null> {
+  if (selector.cardId) return selector.cardId;
+
+  let oracleId = selector.oracleId;
+  if (!oracleId && selector.name) {
+    const { resolved } = await resolveNames(prisma, [selector.name]);
+    oracleId = resolved.get(selector.name.trim())?.oracleId;
+  }
+  if (!oracleId) return null;
+
+  const matches = await prisma.deckCard.findMany({
+    where: { deckId, oracleId, ...(selector.board ? { board: selector.board as DeckBoard } : {}) },
+  });
+  if (matches.length === 0) return null;
+  if (matches.length === 1 || selector.board) return matches[0]!.id;
+  const preferred =
+    matches.find((c) => c.board === 'mainboard') ?? matches.find((c) => c.board === 'command');
+  return (preferred ?? matches[0]!).id;
+}
+
+/** Set a deck card's exact quantity (0 removes it), selecting by id/oracle/name. */
+export async function setDeckCardQuantity(
+  prisma: PrismaClient,
+  deckId: string,
+  userId: string,
+  selector: DeckCardSelector,
+  quantity: number,
+) {
+  const cardId = await resolveDeckCardId(prisma, deckId, selector);
+  if (!cardId) throw new ServiceError('not_found', 'That card is not in this deck.');
+  return updateDeckCard(prisma, deckId, userId, cardId, { quantity });
+}
+
+/** Remove a deck card, selecting by id/oracle/name. */
+export async function removeDeckCardBySelector(
+  prisma: PrismaClient,
+  deckId: string,
+  userId: string,
+  selector: DeckCardSelector,
+) {
+  const cardId = await resolveDeckCardId(prisma, deckId, selector);
+  if (!cardId) throw new ServiceError('not_found', 'That card is not in this deck.');
+  await removeDeckCard(prisma, deckId, userId, cardId);
+}
+
 export interface ImportDeckInput extends CreateDeckInput {
   entries: { quantity: number; name: string; board: Board }[];
 }
