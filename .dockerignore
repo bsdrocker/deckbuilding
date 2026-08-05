@@ -1,0 +1,11 @@
+.git
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+*.log
+.env
+.env.*
+!.env.prod.example
+scratchpad
