@@ -112,6 +112,21 @@ export async function addInventoryByNameAction(
   return { ok: true, message: `Added ${quantity}× ${card.name}` };
 }
 
+/** Copy a shared deck into the current user's account, then open the copy. */
+export async function cloneDeckAction(shareId: string): Promise<{ error?: string }> {
+  const res = await apiFetch('/v1/decks/clone', {
+    method: 'POST',
+    body: JSON.stringify({ shareId }),
+  });
+  if (res.status === 401) redirect('/login');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.message ?? 'Could not copy deck' };
+  }
+  const clone = await res.json();
+  redirect(`/decks/${clone.id}`);
+}
+
 export interface CardSuggestion {
   oracleId: string;
   name: string;

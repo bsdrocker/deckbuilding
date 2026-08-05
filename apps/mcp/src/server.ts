@@ -12,9 +12,11 @@ import {
   addInventory,
   analyzeDeck,
   authenticateApiKey,
+  cloneDeck,
   createDeck,
   deckInventoryDiff,
   findOwnedOptions,
+  listPublicDecks,
   getCardByName,
   getDeck,
   importDeck,
@@ -455,6 +457,49 @@ async function main() {
             freeQuantity: o.freeQuantity,
           })),
         });
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'list_public_decks',
+    {
+      title: 'Browse public decks',
+      description:
+        'Browse decks shared publicly by any user (not just yours). Filter by format, color identity, and name. Useful for finding inspiration or a deck to copy with clone_deck.',
+      inputSchema: {
+        q: z.string().optional(),
+        format: z.enum(FORMATS).optional(),
+        colors: z.array(z.enum(['W', 'U', 'B', 'R', 'G'])).optional(),
+        sort: z.enum(['recent', 'name']).optional(),
+        limit: z.number().int().min(1).max(100).optional(),
+        offset: z.number().int().min(0).optional(),
+      },
+    },
+    async ({ q, format, colors, sort, limit, offset }) => {
+      try {
+        await requireUser();
+        return json(await listPublicDecks(prisma, { q, format, colors, sort, limit, offset }));
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'clone_deck',
+    {
+      title: 'Copy a shared deck',
+      description:
+        "Copy a shared deck (by its share id, e.g. from list_public_decks) into the current user's account as a new private deck. Returns the new deck id.",
+      inputSchema: { shareId: z.string().describe('The share id of a public/unlisted deck.') },
+    },
+    async ({ shareId }) => {
+      try {
+        const user = await requireUser();
+        return json(await cloneDeck(prisma, user.id, shareId));
       } catch (err) {
         return errorResult(err);
       }

@@ -4,7 +4,7 @@ An **API-first Magic: The Gathering deck-building platform**. Its defining featu
 a documented REST API **and** an MCP server, so Claude (or any tool) can read your
 decks, read your **card inventory**, and build/optimize decklists that favor cards
 you **already own**. Long-term goal is feature parity with Moxfield / Archidekt;
-**Milestones 1–4 are complete** (see the milestone notes below).
+**Milestones 1–5 are complete** (see the milestone notes below).
 
 ## What's here
 
@@ -153,8 +153,25 @@ card data imported.
   mouse selection. It clears and refocuses after each add for fast entry. Reuses
   the existing card search (`GET /v1/cards?orderBy=edhrec`).
 
-## Milestone 5+ (not yet built)
+## Milestone 5 (done) — sharing & public decks
 
-Public deck browsing/social + shareable links, playtesting/sample hands, price
-history over time, collaborative decks, and further UI polish toward full
-Moxfield/Archidekt parity.
+- **Deck visibility + share links** — each deck has a `private` / `unlisted` /
+  `public` setting and an opaque `shareId`. The deck view has a visibility
+  selector and a copy-link button (`/d/<shareId>`).
+- **Read-only shared view** — `/d/<shareId>` renders a deck (type-grouped list,
+  mana curve, stats) for anyone, logged in or not. No inventory data is exposed.
+- **Public browse & author pages** — `/browse` lists public decks with
+  format/color/name filters; `/u/<handle>` shows a user's public decks.
+- **Clone** — "Copy to my decks" duplicates a shared deck into your account as a
+  new private deck (`POST /v1/decks/clone`).
+- **Public API** (unauthenticated): `GET /v1/public/decks`,
+  `GET /v1/public/decks/:shareId(/analysis)`, `GET /v1/public/users/:handle/decks`.
+  Private decks 404 there; unlisted decks are reachable by share id but excluded
+  from browse.
+- **MCP:** `list_public_decks` and `clone_deck` for AI-driven discovery/copying.
+
+## Milestone 6+ (not yet built)
+
+Collaborative/multi-user decks, playtesting/sample hands, price history over
+time, social features (likes/comments/follows), and further UI polish toward
+full Moxfield/Archidekt parity.

@@ -1,61 +1,16 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
-import type { Deck, DeckAnalysis, DeckCard, InventoryDiff } from '@/lib/types';
-import { cardTypeCategory, DECK_TYPE_ORDER } from '@/lib/cardTypes';
+import type { Deck, DeckAnalysis, InventoryDiff } from '@/lib/types';
+import { BOARD_LABELS, BOARD_ORDER, TYPE_LABELS, groupByBoard, groupByType } from '@/lib/deckGrouping';
 import { ColorDots } from '@/components/ColorDots';
 import { ManaCurve } from '@/components/ManaCurve';
 import { AddCardForm } from './AddCardForm';
 import { DeckCardRow } from './DeckCardRow';
 import { DeckStatusToggle } from './DeckStatusToggle';
+import { DeckShareControl } from './DeckShareControl';
 import { PrimerSection } from './PrimerSection';
 import { DeleteDeckButton } from '../DeleteDeckButton';
-
-const BOARD_LABELS: Record<string, string> = {
-  command: 'Command Zone',
-  mainboard: 'Mainboard',
-  sideboard: 'Sideboard',
-  maybeboard: 'Maybeboard',
-};
-const BOARD_ORDER = ['command', 'mainboard', 'sideboard', 'maybeboard'];
-
-const TYPE_LABELS: Record<string, string> = {
-  Creature: 'Creatures',
-  Planeswalker: 'Planeswalkers',
-  Enchantment: 'Enchantments',
-  Sorcery: 'Sorceries',
-  Instant: 'Instants',
-  Artifact: 'Artifacts',
-  Battle: 'Battles',
-  Land: 'Lands',
-  Other: 'Other',
-};
-
-interface TypeSection {
-  type: string;
-  cards: DeckCard[];
-  count: number;
-}
-
-/** Group a board's cards into type sections (DECK_TYPE_ORDER), cards A-Z within each. */
-function groupByType(cards: DeckCard[]): TypeSection[] {
-  const byType: Record<string, DeckCard[]> = {};
-  for (const c of cards) (byType[cardTypeCategory(c.oracle.typeLine)] ??= []).push(c);
-  const sections: TypeSection[] = [];
-  for (const type of DECK_TYPE_ORDER) {
-    const group = byType[type];
-    if (!group?.length) continue;
-    group.sort((a, b) => a.oracle.name.localeCompare(b.oracle.name));
-    sections.push({ type, cards: group, count: group.reduce((s, c) => s + c.quantity, 0) });
-  }
-  return sections;
-}
-
-function groupByBoard(cards: DeckCard[]) {
-  const groups: Record<string, DeckCard[]> = {};
-  for (const c of cards) (groups[c.board] ??= []).push(c);
-  return groups;
-}
 
 export default async function DeckPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -89,6 +44,7 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
               <span className="pill bad">{analysis.validation.issues.length} issue(s)</span>
             )}
             <DeckStatusToggle deckId={deck.id} status={deck.status} />
+            <DeckShareControl deckId={deck.id} shareId={deck.shareId} visibility={deck.visibility} />
           </div>
         </div>
         <div className="row" style={{ gap: 8 }}>
