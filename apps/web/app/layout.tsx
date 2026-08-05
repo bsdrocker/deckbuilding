@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { isAuthenticated } from '@/lib/api';
+import { CardBackLogo } from '@/components/CardBackLogo';
 import { logoutAction } from './actions';
 import './globals.css';
 
@@ -16,7 +17,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <nav className="nav">
           <Link href="/" className="brand">
-            🃏 Deckbuilding
+            <CardBackLogo size={20} /> Deckbuilding
           </Link>
           <Link href="/browse">Browse</Link>
           {authed && (
