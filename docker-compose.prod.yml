@@ -1,0 +1,82 @@
+# Production / QA stack: Postgres + API + web, all built from this repo.
+#
+# Usage:
+#   cp .env.prod.example .env.prod          # fill in secrets + your public domain
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+#   # one-time card-data import (~1-2 min, needs internet):
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm api pnpm scryfall:import
+#
+# Only the web service is published (to WEB_PORT). Point your reverse proxy
+# (e.g. NGINX Proxy Manager) at it. The API and Postgres stay on the internal
+# compose network — the browser never talks to the API directly.
+
+x-app: &app
+  image: deckbuilding-app:latest
+  build:
+    context: .
+    target: runtime
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-deck}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-deckbuilding}?schema=public
+  APP_SECRET: ${APP_SECRET}
+  AUTH_SECRET: ${AUTH_SECRET}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-deck}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.prod}
+      POSTGRES_DB: ${POSTGRES_DB:-deckbuilding}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-deck} -d ${POSTGRES_DB:-deckbuilding}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: apply migrations, then exit. The api waits for this to succeed.
+  migrate:
+    <<: *app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+    command: pnpm --filter @deck/db exec prisma migrate deploy
+    restart: "no"
+
+  api:
+    <<: *app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *app-env
+      API_HOST: 0.0.0.0
+      API_PORT: "3001"
+      CORS_ORIGINS: ${PUBLIC_WEB_ORIGIN}
+    command: pnpm --filter @deck/api start
+    restart: unless-stopped
+
+  web:
+    <<: *app
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:3001
+      # Optional: expose Swagger to testers by setting this to a public docs URL.
+      NEXT_PUBLIC_API_DOCS_URL: ${PUBLIC_API_DOCS_URL:-}
+    command: pnpm --filter @deck/web start
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

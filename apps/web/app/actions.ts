@@ -10,6 +10,8 @@ async function storeKey(apiKey: string) {
   (await cookies()).set(API_COOKIE, apiKey, {
     httpOnly: true,
     sameSite: 'lax',
+    // Only sent over HTTPS in production (behind the TLS-terminating proxy).
+    secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: 60 * 60 * 24 * 30,
   });

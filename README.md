@@ -99,6 +99,26 @@ card data imported.
 - **Auth** is API-key based (`Authorization: Bearer <key>`); keys are stored hashed.
 - The **web app** and **MCP server** both go through `@deck/services`, so business
   rules live in one place.
+- **The browser only talks to the web app**; the web app calls the API
+  server-side. So a deployment only needs to expose the web service — the API and
+  Postgres stay internal.
+
+## Deploying (Docker)
+
+A production/QA stack (Postgres + API + web) is defined in
+`docker-compose.prod.yml`, all built from `Dockerfile`.
+
+```bash
+cp .env.prod.example .env.prod                                                    # set secrets + your public domain
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build      # build + start (runs migrations)
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm api pnpm scryfall:import   # one-time card import
+```
+
+Only the `web` service is published (to `WEB_PORT`, default 3000); point a
+reverse proxy (e.g. NGINX Proxy Manager, with TLS) at it. Migrations run
+automatically via a one-shot `migrate` service; the Scryfall import is a manual
+one-time step. Set `NODE_ENV=production` (done in the image) so the auth cookie
+is marked `secure` behind HTTPS.
 
 ## Milestone 2 (done)
 
