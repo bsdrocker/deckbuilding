@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition } from 'react';
-import { importInventoryCsvAction } from '../actions';
+import { importInventoryCsvAction, importInventoryListAction } from '../actions';
 
 interface ImportSummary {
   imported?: number;
@@ -14,14 +14,14 @@ interface ImportSummary {
 export function ImportInventoryForm() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [mode, setMode] = useState<'csv' | 'list'>('csv');
   const [result, setResult] = useState<ImportSummary | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [list, setList] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setFileName(file.name);
     setResult(null);
     const reader = new FileReader();
     reader.onload = () => {
@@ -35,16 +35,58 @@ export function ImportInventoryForm() {
     reader.readAsText(file);
   }
 
+  function importList() {
+    setResult(null);
+    startTransition(async () => {
+      const res = await importInventoryListAction(list);
+      setResult(res);
+      if (!res.error) {
+        setList('');
+        router.refresh();
+      }
+    });
+  }
+
   return (
     <div className="form-col" style={{ maxWidth: 520 }}>
-      <p className="muted" style={{ margin: 0 }}>
-        Upload a ManaBox / Moxfield / Deckbox CSV export. Rows resolve by Scryfall ID, then set + collector
-        number, then card name.
-      </p>
-      <div className="row" style={{ gap: 8 }}>
-        <input ref={inputRef} type="file" accept=".csv,text/csv" onChange={onFile} disabled={pending} />
-        {pending && <span className="muted">Importing…</span>}
+      <div className="seg" role="tablist">
+        <button type="button" className={`seg-opt ${mode === 'csv' ? 'active' : ''}`} onClick={() => setMode('csv')}>
+          CSV file
+        </button>
+        <button type="button" className={`seg-opt ${mode === 'list' ? 'active' : ''}`} onClick={() => setMode('list')}>
+          Paste list
+        </button>
       </div>
+
+      {mode === 'csv' ? (
+        <>
+          <p className="muted" style={{ margin: 0 }}>
+            Upload a ManaBox / Moxfield / Deckbox CSV export. Rows resolve by Scryfall ID, then set + collector
+            number, then card name.
+          </p>
+          <div className="row" style={{ gap: 8 }}>
+            <input ref={inputRef} type="file" accept=".csv,text/csv" onChange={onFile} disabled={pending} />
+            {pending && <span className="muted">Importing…</span>}
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="muted" style={{ margin: 0 }}>
+            Paste a plain-text list, one card per line — e.g. <code>1 Sol Ring (C21) 263 *F*</code>. Set +
+            collector number pin an exact printing; <code>*F*</code>/<code>*E*</code> mark foil/etched.
+          </p>
+          <textarea
+            value={list}
+            onChange={(e) => setList(e.target.value)}
+            placeholder={'1 Sol Ring (C21) 263\n4 Llanowar Elves\n1 Arcane Signet (MOC) 288 *F*'}
+            style={{ minHeight: 140 }}
+            disabled={pending}
+          />
+          <button type="button" onClick={importList} disabled={pending || !list.trim()}>
+            {pending ? 'Importing…' : 'Import list'}
+          </button>
+        </>
+      )}
 
       {result && !result.error && (
         <div className="panel" style={{ background: 'var(--panel-2)' }}>

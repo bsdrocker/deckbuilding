@@ -7,11 +7,20 @@ import { findPrintingsForOracleAction, type PrintingOption } from '@/app/actions
  * In-page modal for choosing a card's printing. Shows a grid of printing images
  * (the actual art for each) and applies the selection immediately on click.
  */
+const FINISHES = [
+  { value: '', label: 'Any finish' },
+  { value: 'nonfoil', label: 'Nonfoil' },
+  { value: 'foil', label: 'Foil' },
+  { value: 'etched', label: 'Etched' },
+];
+
 export function PrintingPickerModal({
   oracleId,
   currentPrintingId,
   cardName,
   allowDefault = false,
+  allowFinish = false,
+  currentFinish = null,
   onSelect,
   onClose,
 }: {
@@ -19,10 +28,15 @@ export function PrintingPickerModal({
   currentPrintingId: string | null;
   cardName: string;
   allowDefault?: boolean;
-  onSelect: (printingId: string | null) => void;
+  /** Show a finish selector; the chosen finish is passed as onSelect's 2nd arg. */
+  allowFinish?: boolean;
+  currentFinish?: string | null;
+  onSelect: (printingId: string | null, finish?: string | null) => void;
   onClose: () => void;
 }) {
   const [printings, setPrintings] = useState<PrintingOption[] | null>(null);
+  const [finish, setFinish] = useState<string>(currentFinish ?? '');
+  const pick = (printingId: string | null) => onSelect(printingId, allowFinish ? finish || null : undefined);
 
   useEffect(() => {
     let active = true;
@@ -52,6 +66,19 @@ export function PrintingPickerModal({
           </button>
         </div>
 
+        {allowFinish && (
+          <label className="field-label" style={{ marginBottom: 12 }}>
+            Finish preference
+            <select value={finish} onChange={(e) => setFinish(e.target.value)} style={{ maxWidth: 200 }}>
+              {FINISHES.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
         {printings === null ? (
           <p className="muted">Loading printings…</p>
         ) : printings.length === 0 ? (
@@ -62,7 +89,7 @@ export function PrintingPickerModal({
               <button
                 type="button"
                 className={`printing-option ${currentPrintingId === null ? 'selected' : ''}`}
-                onClick={() => onSelect(null)}
+                onClick={() => pick(null)}
               >
                 <div className="printing-thumb placeholder">Default art</div>
                 <div className="printing-label">Default</div>
@@ -75,7 +102,7 @@ export function PrintingPickerModal({
                   key={p.scryfallId}
                   type="button"
                   className={`printing-option ${p.scryfallId === currentPrintingId ? 'selected' : ''}`}
-                  onClick={() => onSelect(p.scryfallId)}
+                  onClick={() => pick(p.scryfallId)}
                   title={`${p.setName} · #${p.collectorNumber} · ${p.rarity}`}
                 >
                   {img ? (

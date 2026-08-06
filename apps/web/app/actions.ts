@@ -191,7 +191,37 @@ export interface DeckCardPatch {
   quantity?: number;
   board?: string;
   printingId?: string | null;
+  finish?: string | null;
   categories?: string[];
+}
+
+/**
+ * Add one copy of a deck card to inventory — its pinned printing (or the card's
+ * representative printing) in its preferred finish (or nonfoil).
+ */
+export async function addDeckCardToInventoryAction(input: {
+  oracleId: string;
+  printingId: string | null;
+  finish: string | null;
+}): Promise<{ error?: string; ok?: boolean }> {
+  let printingId = input.printingId;
+  if (!printingId) {
+    // Resolve a representative printing for the oracle.
+    const cardRes = await apiFetch(`/v1/cards/${input.oracleId}`);
+    if (!cardRes.ok) return { error: 'Could not resolve a printing' };
+    const card = await cardRes.json();
+    printingId = card.printings?.[0]?.scryfallId ?? null;
+    if (!printingId) return { error: 'No printing found for this card' };
+  }
+  const res = await apiFetch('/v1/inventory', {
+    method: 'POST',
+    body: JSON.stringify({ printingId, quantity: 1, finish: input.finish ?? 'nonfoil' }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.message ?? 'Could not add to inventory' };
+  }
+  return { ok: true };
 }
 
 export async function updateDeckCardAction(
@@ -304,6 +334,18 @@ export async function importInventoryCsvAction(
 ): Promise<{ error?: string; imported?: number; matchedCopies?: number; unresolved?: { row: number; reason: string }[] }> {
   if (!csv.trim()) return { error: 'Empty file' };
   const res = await apiFetch('/v1/inventory/import', { method: 'POST', body: JSON.stringify({ csv }) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.message ?? 'Import failed' };
+  }
+  return res.json();
+}
+
+export async function importInventoryListAction(
+  list: string,
+): Promise<{ error?: string; imported?: number; matchedCopies?: number; unresolved?: { row: number; reason: string; name?: string }[] }> {
+  if (!list.trim()) return { error: 'Paste a list first' };
+  const res = await apiFetch('/v1/inventory/import-list', { method: 'POST', body: JSON.stringify({ list }) });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     return { error: body.message ?? 'Import failed' };

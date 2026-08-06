@@ -1,25 +1,29 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { searchCardNamesAction, type CardSuggestion } from '../../actions';
+import { searchCardNamesAction, type CardSuggestion } from '@/app/actions';
 
 /**
- * A card-name text input with a debounced typeahead dropdown. Renders a real
- * form field (`name`) so the surrounding form submits the current value. Enter
- * on a highlighted suggestion selects it (and does not submit the form);
- * otherwise the form submits normally.
+ * A card-name text input with a debounced typeahead dropdown. When `name` is
+ * set it renders a real form field so a surrounding form submits the value
+ * (deck "Add a card"). `onSelect` fires when a suggestion is chosen; `onValueChange`
+ * fires on every edit — used where there's no form (inventory add).
  */
 export function CardAutocomplete({
   name,
   placeholder,
   style,
   clearToken = 0,
+  onSelect,
+  onValueChange,
 }: {
-  name: string;
+  name?: string;
   placeholder?: string;
   style?: React.CSSProperties;
   /** Increment to clear the field and refocus (e.g. after a successful add). */
   clearToken?: number;
+  onSelect?: (s: CardSuggestion) => void;
+  onValueChange?: (value: string) => void;
 }) {
   const [value, setValue] = useState('');
   const [suggestions, setSuggestions] = useState<CardSuggestion[]>([]);
@@ -31,6 +35,11 @@ export function CardAutocomplete({
   const skipNextFetch = useRef(false);
   // Guard against out-of-order responses from overlapping requests.
   const requestSeq = useRef(0);
+
+  const update = (v: string) => {
+    setValue(v);
+    onValueChange?.(v);
+  };
 
   // Clear and refocus when the parent bumps clearToken (post-add), for fast entry.
   useEffect(() => {
@@ -77,8 +86,10 @@ export function CardAutocomplete({
   const select = (s: CardSuggestion) => {
     skipNextFetch.current = true;
     setValue(s.name);
+    onValueChange?.(s.name);
     setOpen(false);
     setHighlight(-1);
+    onSelect?.(s);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -105,12 +116,12 @@ export function CardAutocomplete({
         ref={inputRef}
         name={name}
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => update(e.target.value)}
         onKeyDown={onKeyDown}
         onFocus={() => suggestions.length > 0 && setOpen(true)}
         placeholder={placeholder}
         autoComplete="off"
-        required
+        required={Boolean(name)}
         style={{ width: '100%' }}
       />
       {open && suggestions.length > 0 && (

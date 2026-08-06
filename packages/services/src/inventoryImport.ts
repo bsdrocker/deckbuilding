@@ -1,5 +1,6 @@
 import { parse } from 'csv-parse/sync';
 import type { PrismaClient } from '@deck/db';
+import { parseDecklist } from './decklist.js';
 
 /**
  * Bulk-import a collection CSV into inventory. Optimized for ManaBox exports
@@ -125,6 +126,18 @@ export async function importInventoryCsv(
     };
   });
 
+  return resolveAndUpsertRows(prisma, userId, rows);
+}
+
+/**
+ * Resolve parsed rows to printings (Scryfall id → set+collector → name), then
+ * aggregate by inventory key and upsert. Shared by the CSV and list importers.
+ */
+async function resolveAndUpsertRows(
+  prisma: PrismaClient,
+  userId: string,
+  rows: ParsedRow[],
+): Promise<InventoryImportResult> {
   // --- Resolve each row to a printing id, in priority order ---
   const resolved = new Map<number, string>(); // row index -> printingId
 
@@ -233,4 +246,31 @@ export async function importInventoryCsv(
   }
 
   return { rows: rows.length, imported: entries.length, matchedCopies, unresolved };
+}
+
+/**
+ * Bulk-import inventory from a plain-text decklist-style list (one card per line,
+ * e.g. "1 Sol Ring (C21) 263 *F*"). Resolves by set+collector, then name, and
+ * captures `*F*`/`*E*` finish markers. Condition/language default to NM/en.
+ */
+export async function importInventoryList(
+  prisma: PrismaClient,
+  userId: string,
+  text: string,
+): Promise<InventoryImportResult> {
+  const parsed = parseDecklist(text);
+  if (parsed.length === 0) return { rows: 0, imported: 0, matchedCopies: 0, unresolved: [] };
+
+  const rows: ParsedRow[] = parsed.map((p, i) => ({
+    index: i + 1,
+    quantity: p.quantity,
+    setCode: p.setCode?.toLowerCase() || undefined,
+    collectorNumber: p.collectorNumber || undefined,
+    name: p.name,
+    finish: p.finish ?? 'nonfoil',
+    condition: 'NM',
+    language: 'en',
+  }));
+
+  return resolveAndUpsertRows(prisma, userId, rows);
 }

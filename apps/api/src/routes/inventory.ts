@@ -4,6 +4,7 @@ import {
   exportInventoryCsv,
   findOwnedOptions,
   importInventoryCsv,
+  importInventoryList,
   inventoryAllocation,
   inventorySummary,
   inventoryValueBreakdown,
@@ -136,6 +137,20 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
       },
     },
     async (req) => importInventoryCsv(app.prisma, req.user!.id, req.body.csv),
+  );
+
+  r.post(
+    '/inventory/import-list',
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['inventory'],
+        summary: 'Bulk-import inventory from a plain-text list (e.g. "1 Sol Ring (C21) 263 *F*").',
+        security: [{ bearerAuth: [] }],
+        body: z.object({ list: z.string().min(1) }),
+      },
+    },
+    async (req) => importInventoryList(app.prisma, req.user!.id, req.body.list),
   );
 
   r.patch(

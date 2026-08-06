@@ -8,6 +8,17 @@ export interface ParsedDeckLine {
   setCode?: string;
   /** Collector number from a "(SET) 123" annotation, if present. */
   collectorNumber?: string;
+  /** Finish from a trailing marker (*F* → foil, *E* → etched); undefined = none. */
+  finish?: 'nonfoil' | 'foil' | 'etched';
+}
+
+/** Map a stripped finish marker ("*F*", "*E*", "*etched*") to a finish enum. */
+function markerToFinish(marker: string): 'nonfoil' | 'foil' | 'etched' | undefined {
+  const t = marker.replace(/[*\s]/g, '').toLowerCase();
+  if (!t) return undefined;
+  if (t.startsWith('e')) return 'etched';
+  if (t.startsWith('f')) return 'foil';
+  return 'nonfoil';
 }
 
 /**
@@ -58,8 +69,13 @@ export function parseDecklist(text: string): ParsedDeckLine[] {
 
     let rest = m[2]!.trim();
 
-    // Strip trailing finish markers ("*F*", "*E*", "*etched*", possibly repeated).
-    rest = rest.replace(/(?:\s*\*[^*]*\*)+\s*$/, '').trim();
+    // Capture + strip trailing finish markers ("*F*", "*E*", "*etched*").
+    let finish: 'nonfoil' | 'foil' | 'etched' | undefined;
+    const finishMatch = rest.match(/(?:\s*\*[^*]*\*)+\s*$/);
+    if (finishMatch) {
+      finish = markerToFinish(finishMatch[0]);
+      rest = rest.slice(0, finishMatch.index).trim();
+    }
 
     // Capture a trailing "(SET) collector" / "[SET] collector" annotation.
     // Collector numbers can carry letters/dashes (e.g. "OTC-303", "180a").
@@ -76,7 +92,7 @@ export function parseDecklist(text: string): ParsedDeckLine[] {
     let name = rest.replace(/\s*\/\/?\s*/g, ' // ').trim();
     if (!name) continue;
 
-    out.push({ quantity, name, board, setCode, collectorNumber });
+    out.push({ quantity, name, board, setCode, collectorNumber, finish });
   }
 
   return out;

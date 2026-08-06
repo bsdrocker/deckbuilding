@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { CardAutocomplete } from '@/components/CardAutocomplete';
 import {
   addInventoryDetailedAction,
   findPrintingsByNameAction,
@@ -28,18 +29,20 @@ export function AddInventoryForm() {
   const selected = printings.find((p) => p.scryfallId === selectedId);
   const availableFinishes = selected?.finishes.length ? selected.finishes : ['nonfoil'];
 
-  function find() {
+  function find(nameArg?: string) {
+    const q = (nameArg ?? name).trim();
+    if (!q) return;
     setError(null);
     setMessage(null);
     startTransition(async () => {
-      const res = await findPrintingsByNameAction(name);
+      const res = await findPrintingsByNameAction(q);
       if (res.error) {
         setError(res.error);
         setPrintings([]);
         setCardName(null);
         return;
       }
-      setCardName(res.name ?? name);
+      setCardName(res.name ?? q);
       setPrintings(res.printings ?? []);
       const first = res.printings?.[0];
       setSelectedId(first?.scryfallId ?? '');
@@ -68,15 +71,14 @@ export function AddInventoryForm() {
 
   return (
     <div className="form-col" style={{ maxWidth: 480 }}>
-      <div className="row" style={{ gap: 8 }}>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && find()}
+      <div className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
+        <CardAutocomplete
           placeholder="Card name"
           style={{ flex: 1 }}
+          onValueChange={setName}
+          onSelect={(s) => find(s.name)}
         />
-        <button type="button" className="secondary" onClick={find} disabled={pending || !name.trim()}>
+        <button type="button" className="secondary" onClick={() => find()} disabled={pending || !name.trim()}>
           {pending ? '…' : 'Find printings'}
         </button>
       </div>

@@ -3,6 +3,7 @@ import {
   analyzeDeck,
   cloneDeck,
   createDeck,
+  deckAvailability,
   deckInventoryDiff,
   deleteDeck,
   getDeck,
@@ -177,6 +178,7 @@ export async function registerDeckRoutes(app: FastifyInstance) {
           board: z.enum(BOARDS).optional(),
           categories: z.array(z.string()).optional(),
           printingId: z.string().nullable().optional(),
+          finish: z.enum(['nonfoil', 'foil', 'etched']).nullable().optional(),
         }),
       },
     },
@@ -207,6 +209,20 @@ export async function registerDeckRoutes(app: FastifyInstance) {
     '/decks/:id/analysis',
     { preHandler: app.authenticate, schema: { tags: ['decks'], summary: 'Deck statistics + format legality.', security: [{ bearerAuth: [] }], params: z.object({ id: z.string() }) } },
     async (req) => analyzeDeck(app.prisma, req.params.id, req.user!.id),
+  );
+
+  r.get(
+    '/decks/:id/availability',
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['decks'],
+        summary: 'Per-card inventory availability (missing copies + pinned printing/finish status).',
+        security: [{ bearerAuth: [] }],
+        params: z.object({ id: z.string() }),
+      },
+    },
+    async (req) => ({ cards: await deckAvailability(app.prisma, req.params.id, req.user!.id) }),
   );
 
   r.get(
