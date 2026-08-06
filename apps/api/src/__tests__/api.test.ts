@@ -165,6 +165,77 @@ describe('API integration', () => {
     expect(after.cards.find((c: { oracle: { name: string } }) => c.oracle.name === 'Lightning Bolt')).toBeUndefined();
   });
 
+  describe('inventory-aware deck view', () => {
+    it('flags a missing card and clears it after adding to inventory', async () => {
+      // The deck has Sol Ring; we own 1 Sol Ring (added earlier). Mountain x30 is
+      // not owned → should be missing.
+      const before = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}/availability`, headers: authed() })).json();
+      const mountain = before.cards.find((c: { oracleId: string; missing: number; needed: number }) => c.needed === 30);
+      expect(mountain).toBeDefined();
+      expect(mountain.missing).toBeGreaterThan(0);
+
+      const solRingAvail = before.cards.find(
+        (c: { ownedOracle: number }) => c.ownedOracle >= 1,
+      );
+      expect(solRingAvail).toBeDefined();
+      expect(solRingAvail.missing).toBe(0);
+    });
+
+    it('reports pinned-printing status (wrong printing not owned)', async () => {
+      // Pin Sol Ring to a printing we don't own, with a finish.
+      const deck = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
+      const solRow = deck.cards.find((c: { oracle: { name: string } }) => c.oracle.name === 'Sol Ring');
+      expect(solRow).toBeDefined();
+      // Find a Sol Ring printing that is NOT the one we own in inventory.
+      const oracle = await prisma.oracleCard.findFirst({
+        where: { name: { equals: 'Sol Ring', mode: 'insensitive' } },
+        include: { printings: { take: 5 } },
+      });
+      const ownedItem = await prisma.inventoryItem.findFirst({
+        where: { userId, printing: { oracleId: oracle!.oracleId } },
+      });
+      const otherPrinting = oracle!.printings.find((p) => p.scryfallId !== ownedItem?.printingId);
+      expect(otherPrinting).toBeDefined();
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/v1/decks/${deckId}/cards/${solRow.id}`,
+        headers: authed(),
+        payload: { printingId: otherPrinting!.scryfallId, finish: 'foil' },
+      });
+
+      const avail = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}/availability`, headers: authed() })).json();
+      const sol = avail.cards.find((c: { deckCardId: string }) => c.deckCardId === solRow.id);
+      expect(sol.pinnedPrintingId).toBe(otherPrinting!.scryfallId);
+      expect(sol.finish).toBe('foil');
+      expect(sol.printingStatus).toBe('not_owned'); // own a different printing/finish
+    });
+  });
+
+  describe('inventory list import', () => {
+    it('imports a plain-text list with set/collector and finish markers', async () => {
+      const oracle = await prisma.oracleCard.findFirst({
+        where: { name: { equals: 'Llanowar Elves', mode: 'insensitive' } },
+        include: { printings: { take: 1 } },
+      });
+      const printing = oracle?.printings[0];
+      expect(printing).toBeDefined();
+      const list = `2 Llanowar Elves (${printing!.setCode}) ${printing!.collectorNumber} *F*\n1 ThisCardDoesNotExist_zzz`;
+
+      const res = await app.inject({ method: 'POST', url: '/v1/inventory/import-list', headers: authed(), payload: { list } });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.matchedCopies).toBeGreaterThanOrEqual(2);
+      expect(body.unresolved.length).toBeGreaterThanOrEqual(1);
+
+      // The imported copies should be foil (from the *F* marker).
+      const foil = await prisma.inventoryItem.findFirst({
+        where: { userId, printingId: printing!.scryfallId, finish: 'foil' },
+      });
+      expect(foil?.quantity).toBeGreaterThanOrEqual(2);
+    });
+  });
+
   describe('public sharing', () => {
     let shareId: string;
     const setVisibility = (v: string) =>

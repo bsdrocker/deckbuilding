@@ -386,6 +386,78 @@ export async function deckInventoryDiff(
   return diffDeckAgainstInventory(deckData, owned, opts);
 }
 
+export interface DeckCardAvailability {
+  deckCardId: string;
+  oracleId: string;
+  needed: number;
+  ownedOracle: number; // total copies of this oracle in inventory (any printing/finish)
+  missing: number; // max(0, needed - ownedOracle)
+  pinnedPrintingId: string | null;
+  finish: string | null; // preferred finish, if set
+  /**
+   * When a printing is pinned: whether the user owns that exact printing (in the
+   * preferred finish, if one is set). null when no printing is pinned.
+   */
+  printingStatus: 'owned' | 'not_owned' | null;
+  ownedPrintingQty: number; // copies of the pinned printing (matching finish) owned
+}
+
+/**
+ * Per-deck-card inventory availability for the deck view: oracle-level "missing"
+ * plus printing/finish-level status when a card pins a specific printing. Powers
+ * the missing-card and wrong-printing/finish flags.
+ */
+export async function deckAvailability(
+  prisma: PrismaClient,
+  deckId: string,
+  userId: string,
+): Promise<DeckCardAvailability[]> {
+  const deck = await loadDeck(prisma, deckId);
+  if (!deck) throw new ServiceError('not_found', `No deck with id ${deckId}`);
+  if (deck.userId !== userId) throw new ServiceError('forbidden', 'You do not own this deck.');
+
+  const items = await prisma.inventoryItem.findMany({
+    where: { userId },
+    select: { printingId: true, finish: true, quantity: true, printing: { select: { oracleId: true } } },
+  });
+
+  const byOracle = new Map<string, number>();
+  const byPrinting = new Map<string, number>(); // printingId -> qty (any finish)
+  const byPrintingFinish = new Map<string, number>(); // `${printingId}|${finish}` -> qty
+  for (const it of items) {
+    byOracle.set(it.printing.oracleId, (byOracle.get(it.printing.oracleId) ?? 0) + it.quantity);
+    byPrinting.set(it.printingId, (byPrinting.get(it.printingId) ?? 0) + it.quantity);
+    const k = `${it.printingId}|${it.finish}`;
+    byPrintingFinish.set(k, (byPrintingFinish.get(k) ?? 0) + it.quantity);
+  }
+
+  return deck.cards.map((c) => {
+    const ownedOracle = byOracle.get(c.oracleId) ?? 0;
+    const missing = Math.max(0, c.quantity - ownedOracle);
+
+    let printingStatus: 'owned' | 'not_owned' | null = null;
+    let ownedPrintingQty = 0;
+    if (c.printingId) {
+      ownedPrintingQty = c.finish
+        ? byPrintingFinish.get(`${c.printingId}|${c.finish}`) ?? 0
+        : byPrinting.get(c.printingId) ?? 0;
+      printingStatus = ownedPrintingQty > 0 ? 'owned' : 'not_owned';
+    }
+
+    return {
+      deckCardId: c.id,
+      oracleId: c.oracleId,
+      needed: c.quantity,
+      ownedOracle,
+      missing,
+      pinnedPrintingId: c.printingId,
+      finish: c.finish,
+      printingStatus,
+      ownedPrintingQty,
+    };
+  });
+}
+
 export interface OwnedOption extends OracleCard {
   ownedQuantity: number;
   freeQuantity: number; // owned copies not committed to built decks

@@ -183,6 +183,8 @@ export interface UpdateCardInput {
   categories?: string[];
   /** Preferred printing (art). null clears it; must belong to the same oracle. */
   printingId?: string | null;
+  /** Preferred finish (nonfoil|foil|etched). null clears it. */
+  finish?: string | null;
 }
 
 export async function updateDeckCard(
@@ -220,8 +222,9 @@ export async function updateDeckCard(
       quantity: patch.quantity,
       board: patch.board as DeckBoard | undefined,
       categories: patch.categories,
-      // undefined = leave unchanged; null = clear the preferred printing.
+      // undefined = leave unchanged; null = clear the preferred printing/finish.
       printingId: patch.printingId === undefined ? undefined : patch.printingId,
+      finish: patch.finish === undefined ? undefined : patch.finish,
     },
   });
   await refreshColorIdentity(prisma, deckId);

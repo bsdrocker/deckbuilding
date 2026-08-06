@@ -30,6 +30,12 @@ describe('parseDecklist', () => {
     expect(a).toMatchObject({ quantity: 10, name: 'Forest', setCode: 'SPM', collectorNumber: '193' });
   });
 
+  it('captures finish from markers (*F* foil, *E* etched, none)', () => {
+    expect(parseDecklist('1 Sol Ring (C21) 263 *F*')[0]).toMatchObject({ name: 'Sol Ring', finish: 'foil' });
+    expect(parseDecklist('1 Sol Ring (SLD) 1 *E*')[0]).toMatchObject({ name: 'Sol Ring', finish: 'etched' });
+    expect(parseDecklist('1 Sol Ring (C21) 263')[0]).toMatchObject({ name: 'Sol Ring', finish: undefined });
+  });
+
   it('normalizes single-slash double-faced names to "//"', () => {
     const [a] = parseDecklist('1 Miles Morales / Ultimate Spider-Man (SPM) 211');
     expect(a).toMatchObject({ name: 'Miles Morales // Ultimate Spider-Man', setCode: 'SPM', collectorNumber: '211' });

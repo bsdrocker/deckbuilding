@@ -197,6 +197,7 @@ model DeckCard {
   quantity   Int       @default(1)
   board      DeckBoard @default(mainboard)
   categories String[]  @default([]) // user tags: "Ramp","Removal",...
+  finish     String?   @map("finish") // optional preferred finish: nonfoil|foil|etched
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

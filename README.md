@@ -190,6 +190,22 @@ is marked `secure` behind HTTPS.
   from browse.
 - **MCP:** `list_public_decks` and `clone_deck` for AI-driven discovery/copying.
 
+### Milestone 5.1 — inventory-aware deck view
+
+- **Missing-card flags** — deck rows show a red "missing N" badge when you own
+  fewer copies than the deck needs (`GET /v1/decks/:id/availability`).
+- **Add to inventory from a deck** — a "＋inv" button on each row adds one copy
+  (the pinned printing, or the card's representative printing) to your collection.
+- **Printing & finish matter** — deck cards can pin a printing *and* a finish
+  (nonfoil/foil/etched, chosen in the printing picker → `deck_cards.finish`). A
+  card flags "printing/finish not owned" when you own the card but not that exact
+  printing/finish.
+- **Inventory autocomplete** — the inventory "Add a card" field uses the same
+  card-name typeahead as the deck builder.
+- **Bulk list import** — import inventory from a pasted text list (e.g.
+  `1 Sol Ring (C21) 263 *F*`) in addition to CSV; `*F*`/`*E*` set the finish
+  (`POST /v1/inventory/import-list`).
+
 ## Milestone 6+ (not yet built)
 
 Collaborative/multi-user decks, playtesting/sample hands, price history over

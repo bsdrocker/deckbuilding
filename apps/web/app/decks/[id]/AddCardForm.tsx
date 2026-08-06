@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useState } from 'react';
 import { addCardsAction } from '../../actions';
-import { CardAutocomplete } from './CardAutocomplete';
+import { CardAutocomplete } from '@/components/CardAutocomplete';
 
 export function AddCardForm({ deckId }: { deckId: string }) {
   const router = useRouter();

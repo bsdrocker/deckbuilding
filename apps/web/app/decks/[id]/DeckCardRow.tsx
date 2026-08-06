@@ -4,8 +4,12 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { CardHover } from '@/components/CardHover';
 import { PrintingPickerModal } from '@/components/PrintingPickerModal';
-import type { DeckCard } from '@/lib/types';
-import { removeDeckCardAction, updateDeckCardAction } from '../../actions';
+import type { DeckCard, DeckCardAvailability } from '@/lib/types';
+import {
+  addDeckCardToInventoryAction,
+  removeDeckCardAction,
+  updateDeckCardAction,
+} from '../../actions';
 
 const BOARDS = [
   { value: 'mainboard', label: 'Main' },
@@ -14,7 +18,22 @@ const BOARDS = [
   { value: 'maybeboard', label: 'Maybe' },
 ];
 
-export function DeckCardRow({ deckId, card }: { deckId: string; card: DeckCard }) {
+const FINISHES = [
+  { value: '', label: 'Any finish' },
+  { value: 'nonfoil', label: 'Nonfoil' },
+  { value: 'foil', label: 'Foil' },
+  { value: 'etched', label: 'Etched' },
+];
+
+export function DeckCardRow({
+  deckId,
+  card,
+  availability,
+}: {
+  deckId: string;
+  card: DeckCard;
+  availability?: DeckCardAvailability;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -36,43 +55,66 @@ export function DeckCardRow({ deckId, card }: { deckId: string; card: DeckCard }
 
   const imageUrl = card.printing?.imageUris?.normal ?? card.oracle.imageUris?.normal ?? null;
 
+  // Availability flags: red "missing" (own too few copies) takes precedence;
+  // otherwise amber "printing/finish not owned" when the pinned printing/finish
+  // isn't in inventory even though enough copies of the card are.
+  const missing = availability?.missing ?? 0;
+  const printingMismatch =
+    missing === 0 && availability?.printingStatus === 'not_owned';
+  const finishLabel = card.finish ? ` ${card.finish}` : '';
+
   return (
     <li className="deck-card-row" style={{ opacity: pending ? 0.5 : 1 }}>
       <span className="row" style={{ gap: 8, flex: 1, minWidth: 0 }}>
         <span className="qty-stepper">
-          <button
-            type="button"
-            className="step"
-            aria-label="Decrease"
-            onClick={() => setQuantity(card.quantity - 1)}
-            disabled={pending}
-          >
+          <button type="button" className="step" aria-label="Decrease" onClick={() => setQuantity(card.quantity - 1)} disabled={pending}>
             −
           </button>
           <span className="qty-val">{card.quantity}</span>
-          <button
-            type="button"
-            className="step"
-            aria-label="Increase"
-            onClick={() => setQuantity(card.quantity + 1)}
-            disabled={pending}
-          >
+          <button type="button" className="step" aria-label="Increase" onClick={() => setQuantity(card.quantity + 1)} disabled={pending}>
             +
           </button>
         </span>
         <button
           type="button"
           className="card-name-btn"
-          title="Choose printing (art)"
+          title="Choose printing (art) & finish"
           onClick={() => setPickingArt(true)}
           disabled={pending}
         >
           <CardHover name={card.oracle.name} imageUrl={imageUrl} />
         </button>
+        {missing > 0 && (
+          <span className="pill bad" title={`You own ${availability?.ownedOracle ?? 0}; this needs ${card.quantity}.`}>
+            missing {missing}
+          </span>
+        )}
+        {printingMismatch && (
+          <span
+            className="pill warn"
+            title={`You own this card but not the pinned printing${finishLabel} in inventory.`}
+          >
+            printing{finishLabel} not owned
+          </span>
+        )}
       </span>
 
       <span className="row" style={{ gap: 8 }}>
         <span className="muted mana">{card.oracle.manaCost ?? ''}</span>
+        <button
+          type="button"
+          className="inv-btn"
+          title="Add one copy to inventory"
+          aria-label={`Add ${card.oracle.name} to inventory`}
+          onClick={() =>
+            run(() =>
+              addDeckCardToInventoryAction({ oracleId: card.oracleId, printingId: card.printingId, finish: card.finish }),
+            )
+          }
+          disabled={pending}
+        >
+          ＋inv
+        </button>
         <select
           className="board-select"
           value={card.board}
@@ -86,14 +128,7 @@ export function DeckCardRow({ deckId, card }: { deckId: string; card: DeckCard }
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          className="remove-btn"
-          aria-label={`Remove ${card.oracle.name}`}
-          title="Remove"
-          onClick={() => run(() => removeDeckCardAction(deckId, card.id))}
-          disabled={pending}
-        >
+        <button type="button" className="remove-btn" aria-label={`Remove ${card.oracle.name}`} title="Remove" onClick={() => run(() => removeDeckCardAction(deckId, card.id))} disabled={pending}>
           ×
         </button>
       </span>
@@ -104,11 +139,14 @@ export function DeckCardRow({ deckId, card }: { deckId: string; card: DeckCard }
           currentPrintingId={card.printingId}
           cardName={card.oracle.name}
           allowDefault
+          allowFinish
+          currentFinish={card.finish}
           onClose={() => setPickingArt(false)}
-          onSelect={(printingId) => {
+          onSelect={(printingId, finish) => {
             setPickingArt(false);
-            if (printingId !== card.printingId) {
-              run(() => updateDeckCardAction(deckId, card.id, { printingId }));
+            const finishChanged = (finish ?? null) !== (card.finish ?? null);
+            if (printingId !== card.printingId || finishChanged) {
+              run(() => updateDeckCardAction(deckId, card.id, { printingId, finish: finish ?? null }));
             }
           }}
         />

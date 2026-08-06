@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
-import type { Deck, DeckAnalysis, InventoryDiff } from '@/lib/types';
+import type { Deck, DeckAnalysis, DeckCardAvailability, InventoryDiff } from '@/lib/types';
 import { BOARD_LABELS, BOARD_ORDER, TYPE_LABELS, groupByBoard, groupByType } from '@/lib/deckGrouping';
 import { ColorDots } from '@/components/ColorDots';
 import { ManaCurve } from '@/components/ManaCurve';
@@ -14,10 +14,11 @@ import { DeleteDeckButton } from '../DeleteDeckButton';
 
 export default async function DeckPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [deckRes, analysisRes, diffRes] = await Promise.all([
+  const [deckRes, analysisRes, diffRes, availRes] = await Promise.all([
     apiFetch(`/v1/decks/${id}`),
     apiFetch(`/v1/decks/${id}/analysis`),
     apiFetch(`/v1/decks/${id}/inventory-diff`),
+    apiFetch(`/v1/decks/${id}/availability`),
   ]);
 
   if (deckRes.status === 401) redirect('/login');
@@ -26,6 +27,8 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
   const deck = (await deckRes.json()) as Deck;
   const analysis = (await analysisRes.json()) as DeckAnalysis;
   const diff = (await diffRes.json()) as InventoryDiff;
+  const availability = (await availRes.json()) as { cards: DeckCardAvailability[] };
+  const availByCard = new Map(availability.cards.map((a) => [a.deckCardId, a]));
   const groups = groupByBoard(deck.cards);
 
   return (
@@ -80,7 +83,7 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
                       </h4>
                       <ul className="card-list">
                         {section.cards.map((c) => (
-                          <DeckCardRow key={c.id} deckId={deck.id} card={c} />
+                          <DeckCardRow key={c.id} deckId={deck.id} card={c} availability={availByCard.get(c.id)} />
                         ))}
                       </ul>
                     </div>

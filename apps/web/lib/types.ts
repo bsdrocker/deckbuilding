@@ -26,6 +26,7 @@ export interface DeckCard {
   id: string;
   oracleId: string;
   printingId: string | null;
+  finish: string | null;
   quantity: number;
   board: 'mainboard' | 'sideboard' | 'maybeboard' | 'command';
   categories: string[];
@@ -80,6 +81,18 @@ export interface PublicDeckSummary {
   cardCount: number;
   updatedAt: string;
   authorHandle: string;
+}
+
+export interface DeckCardAvailability {
+  deckCardId: string;
+  oracleId: string;
+  needed: number;
+  ownedOracle: number;
+  missing: number;
+  pinnedPrintingId: string | null;
+  finish: string | null;
+  printingStatus: 'owned' | 'not_owned' | null;
+  ownedPrintingQty: number;
 }
 
 export interface ManaCurveBucket {
