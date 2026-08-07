@@ -114,11 +114,44 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build    
 docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm api pnpm scryfall:import   # one-time card import
 ```
 
-Only the `web` service is published (to `WEB_PORT`, default 3000); point a
-reverse proxy (e.g. NGINX Proxy Manager, with TLS) at it. Migrations run
-automatically via a one-shot `migrate` service; the Scryfall import is a manual
-one-time step. Set `NODE_ENV=production` (done in the image) so the auth cookie
-is marked `secure` behind HTTPS.
+The `web` service is published (to `WEB_PORT`, default 3000) and the `api`
+service too (to `API_PORT_HOST`, default 3001); point a reverse proxy (e.g. NGINX
+Proxy Manager, with TLS) at them. Migrations run automatically via a one-shot
+`migrate` service; the Scryfall import is a manual one-time step. Set
+`NODE_ENV=production` (done in the image) so the auth cookie is marked `secure`
+behind HTTPS.
+
+### Exposing the API at `/v1` (for the MCP HTTP backend / API clients)
+
+The browser only needs the web app, but the [MCP HTTP backend](apps/mcp/README.md)
+and any direct API clients need the REST API reachable over HTTPS. Route the
+`/v1` path on your domain to the API using a same-host, path-based rule.
+
+In **NGINX Proxy Manager**, on the `mtg.example.com` proxy host:
+
+1. Forward the host itself to the **web** app (`<docker-host-ip>` : `WEB_PORT`),
+   with SSL + Websockets as usual.
+2. Add a **Custom location** (Custom locations tab):
+   - **Location:** `/v1`
+   - **Scheme:** `http` · **Forward Hostname/IP:** `<docker-host-ip>` ·
+     **Forward Port:** `API_PORT_HOST` (3001)
+
+   NGINX passes the full URI unchanged, so `GET /v1/decks` reaches the API's
+   `/v1/decks` — no rewrite needed. (Optionally add a `/docs` location the same
+   way to expose Swagger.)
+
+The MCP then talks to it directly:
+
+```json
+"env": { "DECK_API_URL": "https://mtg.example.com", "DECKBUILDER_API_KEY": "deck_live_..." }
+```
+
+**Firewall note:** keep the published `WEB_PORT`/`API_PORT_HOST` closed to the
+public internet (only 80/443 open); the reverse proxy reaches them over the
+Docker host's LAN/bridge address. Exposing `/v1` makes the auth + public
+endpoints internet-reachable — the authenticated ones still require a valid API
+key, and registration is open (gate it with an NPM Access List if you don't want
+public sign-ups).
 
 ## Milestone 2 (done)
 
