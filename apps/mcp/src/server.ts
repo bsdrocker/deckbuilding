@@ -3,59 +3,21 @@
  * MCP server exposing the deck-building platform to Claude and other MCP clients.
  * Authenticates as a single user via the DECKBUILDER_API_KEY env var.
  *
- * The standout tools are `deck_inventory_diff` and `find_owned_options`, which
- * let AI deckbuilding bias toward cards the user already owns.
+ * Two backends (see backend.ts): in-process against a local database (default),
+ * or the deployed REST API over HTTPS when DECK_API_URL is set. The standout
+ * tools are `deck_inventory_diff` and `find_owned_options`, which let AI
+ * deckbuilding bias toward cards the user already owns.
  */
-import { prisma } from '@deck/db';
-import {
-  addCardsToDeck,
-  addInventory,
-  analyzeDeck,
-  authenticateApiKey,
-  cloneDeck,
-  createDeck,
-  deckInventoryDiff,
-  findOwnedOptions,
-  listPublicDecks,
-  getCardByName,
-  getDeck,
-  importDeck,
-  importInventoryCsv,
-  inventoryAllocation,
-  inventorySummary,
-  updateDeck,
-  listDecks,
-  listInventory,
-  parseDecklist,
-  removeDeckCardBySelector,
-  searchCards,
-  setDeckCardQuantity,
-  type AuthUser,
-} from '@deck/services';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { createBackend, type Backend } from './backend.js';
 
 const FORMATS = [
   'commander', 'standard', 'modern', 'pioneer', 'pauper', 'legacy', 'vintage', 'brawl',
   'historic', 'explorer', 'oathbreaker', 'premodern', 'penny', 'duel', 'oldschool', 'limited', 'casual',
 ] as const;
 const BOARDS = ['mainboard', 'sideboard', 'maybeboard', 'command'] as const;
-
-let cachedUser: AuthUser | null = null;
-
-/** Resolve the configured API key to a user, or throw a helpful error. */
-async function requireUser(): Promise<AuthUser> {
-  if (cachedUser) return cachedUser;
-  const user = await authenticateApiKey(prisma, process.env.DECKBUILDER_API_KEY);
-  if (!user) {
-    throw new Error(
-      'Not authenticated. Set DECKBUILDER_API_KEY to a valid API key (create one via the API: POST /v1/auth/register or /v1/keys).',
-    );
-  }
-  cachedUser = user;
-  return user;
-}
 
 /** Wrap a tool handler so its result is returned as pretty JSON text. */
 function json(data: unknown) {
@@ -68,6 +30,7 @@ function errorResult(err: unknown) {
 }
 
 async function main() {
+  const backend: Backend = await createBackend();
   const server = new McpServer({ name: 'deckbuilding', version: '0.1.0' });
 
   server.registerTool(
@@ -83,10 +46,10 @@ async function main() {
     },
     async ({ query, limit }) => {
       try {
-        const res = await searchCards(prisma, query, { limit });
+        const res = await backend.searchCards(query, limit);
         return json({
           total: res.total,
-          cards: res.cards.map((c) => ({
+          cards: res.cards.map((c: any) => ({
             oracleId: c.oracleId,
             name: c.name,
             manaCost: c.manaCost,
@@ -111,7 +74,7 @@ async function main() {
     },
     async ({ name }) => {
       try {
-        return json(await getCardByName(prisma, name));
+        return json(await backend.getCard(name));
       } catch (err) {
         return errorResult(err);
       }
@@ -123,8 +86,7 @@ async function main() {
     { title: 'List your decks', description: 'List all decks owned by the authenticated user.', inputSchema: {} },
     async () => {
       try {
-        const user = await requireUser();
-        return json(await listDecks(prisma, user.id));
+        return json(await backend.listDecks());
       } catch (err) {
         return errorResult(err);
       }
@@ -136,8 +98,7 @@ async function main() {
     { title: 'Get a deck', description: 'Get a deck with its cards.', inputSchema: { deckId: z.string() } },
     async ({ deckId }) => {
       try {
-        const user = await requireUser();
-        return json(await getDeck(prisma, deckId, user.id));
+        return json(await backend.getDeck(deckId));
       } catch (err) {
         return errorResult(err);
       }
@@ -157,8 +118,7 @@ async function main() {
     },
     async ({ name, format, description }) => {
       try {
-        const user = await requireUser();
-        return json(await createDeck(prisma, user.id, { name, format, description }));
+        return json(await backend.createDeck({ name, format, description }));
       } catch (err) {
         return errorResult(err);
       }
@@ -183,17 +143,7 @@ async function main() {
     },
     async ({ deckId, name, format, description, visibility, status, primer }) => {
       try {
-        const user = await requireUser();
-        return json(
-          await updateDeck(prisma, deckId, user.id, {
-            name,
-            format,
-            description,
-            visibility,
-            status,
-            primer,
-          }),
-        );
+        return json(await backend.updateDeck(deckId, { name, format, description, visibility, status, primer }));
       } catch (err) {
         return errorResult(err);
       }
@@ -222,8 +172,7 @@ async function main() {
     },
     async ({ deckId, cards }) => {
       try {
-        const user = await requireUser();
-        return json(await addCardsToDeck(prisma, deckId, user.id, cards));
+        return json(await backend.addCardsToDeck(deckId, cards));
       } catch (err) {
         return errorResult(err);
       }
@@ -247,15 +196,7 @@ async function main() {
     },
     async ({ deckId, quantity, name, oracleId, cardId, board }) => {
       try {
-        const user = await requireUser();
-        const result = await setDeckCardQuantity(
-          prisma,
-          deckId,
-          user.id,
-          { name, oracleId, cardId, board },
-          quantity,
-        );
-        return json(result ?? { removed: true });
+        return json(await backend.setCardQuantity(deckId, { name, oracleId, cardId, board }, quantity));
       } catch (err) {
         return errorResult(err);
       }
@@ -278,9 +219,7 @@ async function main() {
     },
     async ({ deckId, name, oracleId, cardId, board }) => {
       try {
-        const user = await requireUser();
-        await removeDeckCardBySelector(prisma, deckId, user.id, { name, oracleId, cardId, board });
-        return json({ removed: true });
+        return json(await backend.removeCard(deckId, { name, oracleId, cardId, board }));
       } catch (err) {
         return errorResult(err);
       }
@@ -300,9 +239,7 @@ async function main() {
     },
     async ({ name, format, list }) => {
       try {
-        const user = await requireUser();
-        const entries = parseDecklist(list);
-        return json(await importDeck(prisma, user.id, { name, format, entries }));
+        return json(await backend.importDeck(name, format, list));
       } catch (err) {
         return errorResult(err);
       }
@@ -318,8 +255,7 @@ async function main() {
     },
     async ({ deckId }) => {
       try {
-        const user = await requireUser();
-        return json(await analyzeDeck(prisma, deckId, user.id));
+        return json(await backend.analyzeDeck(deckId));
       } catch (err) {
         return errorResult(err);
       }
@@ -342,19 +278,7 @@ async function main() {
     },
     async ({ limit, offset, sort, dir, filter }) => {
       try {
-        const user = await requireUser();
-        const [list, summary, alloc] = await Promise.all([
-          listInventory(prisma, user.id, { limit, offset, sort, dir, filter }),
-          inventorySummary(prisma, user.id),
-          inventoryAllocation(prisma, user.id),
-        ]);
-        return json({
-          summary,
-          allocation: alloc.totals,
-          conflicts: alloc.conflicts.slice(0, 20),
-          total: list.total,
-          items: list.items,
-        });
+        return json(await backend.getInventory({ limit, offset, sort, dir, filter }));
       } catch (err) {
         return errorResult(err);
       }
@@ -382,10 +306,7 @@ async function main() {
     },
     async ({ items }) => {
       try {
-        const user = await requireUser();
-        const results = [];
-        for (const item of items) results.push(await addInventory(prisma, user.id, item));
-        return json({ added: results.length, items: results });
+        return json(await backend.addInventory(items));
       } catch (err) {
         return errorResult(err);
       }
@@ -402,8 +323,7 @@ async function main() {
     },
     async ({ csv }) => {
       try {
-        const user = await requireUser();
-        return json(await importInventoryCsv(prisma, user.id, csv));
+        return json(await backend.importInventoryCsv(csv));
       } catch (err) {
         return errorResult(err);
       }
@@ -420,8 +340,7 @@ async function main() {
     },
     async ({ deckId, includeSideboard }) => {
       try {
-        const user = await requireUser();
-        return json(await deckInventoryDiff(prisma, deckId, user.id, { includeSideboard }));
+        return json(await backend.deckInventoryDiff(deckId, includeSideboard));
       } catch (err) {
         return errorResult(err);
       }
@@ -442,11 +361,10 @@ async function main() {
     },
     async ({ query, limit, onlyFree }) => {
       try {
-        const user = await requireUser();
-        const options = await findOwnedOptions(prisma, user.id, query, { limit, onlyFree });
+        const options = await backend.findOwnedOptions(query, { limit, onlyFree });
         return json({
           count: options.length,
-          options: options.map((o) => ({
+          options: options.map((o: any) => ({
             oracleId: o.oracleId,
             name: o.name,
             manaCost: o.manaCost,
@@ -480,8 +398,7 @@ async function main() {
     },
     async ({ q, format, colors, sort, limit, offset }) => {
       try {
-        await requireUser();
-        return json(await listPublicDecks(prisma, { q, format, colors, sort, limit, offset }));
+        return json(await backend.listPublicDecks({ q, format, colors, sort, limit, offset }));
       } catch (err) {
         return errorResult(err);
       }
@@ -498,18 +415,24 @@ async function main() {
     },
     async ({ shareId }) => {
       try {
-        const user = await requireUser();
-        return json(await cloneDeck(prisma, user.id, shareId));
+        return json(await backend.cloneDeck(shareId));
       } catch (err) {
         return errorResult(err);
       }
     },
   );
 
+  // Fail-soft credential check so testers get an immediate, clear message.
+  try {
+    await backend.verify();
+  } catch (err) {
+    console.error(`[deck-mcp] warning: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  // stderr is safe for logging on a stdio MCP server (stdout is the protocol channel).
-  console.error('[deck-mcp] ready (stdio). Auth via DECKBUILDER_API_KEY.');
+  const where = backend.mode === 'http' ? `http → ${process.env.DECK_API_URL}` : 'database (in-process)';
+  console.error(`[deck-mcp] ready (stdio). Backend: ${where}. Auth via DECKBUILDER_API_KEY.`);
 }
 
 main().catch((err) => {

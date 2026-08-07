@@ -21,10 +21,26 @@ favor cards you **already own**.
 | **`deck_inventory_diff`** | Owned vs. missing copies for a deck, plus cost to complete. |
 | **`find_owned_options`** | Cards you already own that match a query — bias deckbuilding toward your collection (`onlyFree` excludes cards committed to built decks). |
 
+## Backends: local database vs. deployed API
+
+The server can reach the platform two ways, selected by environment:
+
+- **database** (default) — in-process against a local Postgres. Set
+  `DATABASE_URL`. Best for local dev / Cowork on the same machine as the DB.
+- **http** — talk to a deployed instance's REST API over HTTPS with your key as a
+  bearer token. Set **`DECK_API_URL`** (e.g. `https://mtg.example.com`) and leave
+  `DATABASE_URL` unset. No database access required — ideal for using a remote QA
+  or production instance.
+
+> The http backend needs the platform's `/v1` API reachable at `DECK_API_URL`.
+> If your reverse proxy only exposes the web app, add a proxy host (or path) for
+> the API before using http mode.
+
 ## Authentication
 
-The server authenticates as a single user via an API key in `DECKBUILDER_API_KEY`.
-Create one through the API:
+The server authenticates as a single user via an API key in `DECKBUILDER_API_KEY`
+(a Bearer token in http mode, resolved against the DB in database mode). Create
+one through the API:
 
 ```bash
 # Register (returns an apiKey) — or use POST /v1/keys if you already have one.
@@ -53,6 +69,15 @@ Add to `claude_desktop_config.json` (macOS:
 }
 ```
 
+For **http mode** (a deployed instance), swap the `env` block:
+
+```json
+"env": {
+  "DECK_API_URL": "https://mtg.example.com",
+  "DECKBUILDER_API_KEY": "deck_live_..."
+}
+```
+
 Build first with `pnpm --filter @deck/mcp build`. Then restart Claude Desktop.
 
 ## Configure in Claude Code
@@ -60,6 +85,15 @@ Build first with `pnpm --filter @deck/mcp build`. Then restart Claude Desktop.
 ```bash
 claude mcp add deckbuilding \
   --env DATABASE_URL="postgresql://deck:deck@localhost:5432/deckbuilding?schema=public" \
+  --env DECKBUILDER_API_KEY="deck_live_..." \
+  -- node /absolute/path/to/deckbuilding/apps/mcp/dist/server.js
+```
+
+For a deployed instance (http mode), use `DECK_API_URL` instead of `DATABASE_URL`:
+
+```bash
+claude mcp add deckbuilding \
+  --env DECK_API_URL="https://mtg.example.com" \
   --env DECKBUILDER_API_KEY="deck_live_..." \
   -- node /absolute/path/to/deckbuilding/apps/mcp/dist/server.js
 ```
