@@ -60,6 +60,11 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: "3001"
       CORS_ORIGINS: ${PUBLIC_WEB_ORIGIN}
+    # Published so the reverse proxy can route the /v1 path to the API (for the
+    # MCP HTTP backend and any direct API clients). Keep this port firewalled
+    # from the public internet — only your reverse proxy should reach it.
+    ports:
+      - "${API_PORT_HOST:-3001}:3001"
     command: pnpm --filter @deck/api start
     restart: unless-stopped
 
