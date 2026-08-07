@@ -210,6 +210,22 @@ describe('API integration', () => {
       expect(sol.finish).toBe('foil');
       expect(sol.printingStatus).toBe('not_owned'); // own a different printing/finish
     });
+
+    it('reports per-printing ownership for the printing picker', async () => {
+      const oracle = await prisma.oracleCard.findFirst({
+        where: { name: { equals: 'Sol Ring', mode: 'insensitive' } },
+      });
+      const res = await app.inject({
+        method: 'GET',
+        url: `/v1/inventory/owned-printings/${oracle!.oracleId}`,
+        headers: authed(),
+      });
+      expect(res.statusCode).toBe(200);
+      const { owned } = res.json() as { owned: { printingId: string; total: number; byFinish: Record<string, number> }[] };
+      expect(owned.length).toBeGreaterThanOrEqual(1);
+      expect(owned[0]!.total).toBeGreaterThanOrEqual(1);
+      expect(owned[0]!.byFinish).toBeDefined();
+    });
   });
 
   describe('inventory list import', () => {

@@ -260,6 +260,27 @@ export interface PrintingOption {
   rarity: string;
   finishes: string[];
   imageUris: { normal?: string; small?: string } | null;
+  /** Copies of this printing the current user owns (merged from inventory). */
+  ownedQty?: number;
+  ownedByFinish?: Record<string, number>;
+}
+
+/** Merge per-printing ownership from inventory onto a printings list. */
+async function mergeOwnership(oracleId: string, printings: PrintingOption[]): Promise<PrintingOption[]> {
+  const res = await apiFetch(`/v1/inventory/owned-printings/${oracleId}`);
+  if (!res.ok) return printings;
+  const { owned } = (await res.json()) as {
+    owned: { printingId: string; total: number; byFinish: Record<string, number> }[];
+  };
+  const byId = new Map(owned.map((o) => [o.printingId, o]));
+  for (const p of printings) {
+    const o = byId.get(p.scryfallId);
+    if (o) {
+      p.ownedQty = o.total;
+      p.ownedByFinish = o.byFinish;
+    }
+  }
+  return printings;
 }
 
 /** Look up printings for a card by name (exact then fuzzy). */
@@ -270,7 +291,8 @@ export async function findPrintingsByNameAction(
   const res = await apiFetch(`/v1/cards/named?name=${encodeURIComponent(name)}`);
   if (!res.ok) return { error: `Card not found: ${name}` };
   const card = await res.json();
-  return { oracleId: card.oracleId, name: card.name, printings: card.printings ?? [] };
+  const printings = await mergeOwnership(card.oracleId, card.printings ?? []);
+  return { oracleId: card.oracleId, name: card.name, printings };
 }
 
 /** Look up printings for a card by oracle id (for the deck preferred-art picker). */
@@ -280,7 +302,8 @@ export async function findPrintingsForOracleAction(
   const res = await apiFetch(`/v1/cards/${oracleId}`);
   if (!res.ok) return { error: 'Could not load printings' };
   const card = await res.json();
-  return { printings: card.printings ?? [] };
+  const printings = await mergeOwnership(oracleId, card.printings ?? []);
+  return { printings };
 }
 
 export async function addInventoryDetailedAction(input: {

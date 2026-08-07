@@ -62,6 +62,10 @@ export function DeckCardRow({
   const printingMismatch =
     missing === 0 && availability?.printingStatus === 'not_owned';
   const finishLabel = card.finish ? ` ${card.finish}` : '';
+  // Only offer "add to inventory" when there's something to acquire: missing
+  // copies, or the pinned printing/finish isn't owned. (Show it too if
+  // availability hasn't loaded, so the action is never wrongly hidden.)
+  const needsInv = !availability || missing > 0 || availability.printingStatus === 'not_owned';
 
   return (
     <li className="deck-card-row" style={{ opacity: pending ? 0.5 : 1 }}>
@@ -101,20 +105,22 @@ export function DeckCardRow({
 
       <span className="row" style={{ gap: 8 }}>
         <span className="muted mana">{card.oracle.manaCost ?? ''}</span>
-        <button
-          type="button"
-          className="inv-btn"
-          title="Add one copy to inventory"
-          aria-label={`Add ${card.oracle.name} to inventory`}
-          onClick={() =>
-            run(() =>
-              addDeckCardToInventoryAction({ oracleId: card.oracleId, printingId: card.printingId, finish: card.finish }),
-            )
-          }
-          disabled={pending}
-        >
-          ＋inv
-        </button>
+        {needsInv && (
+          <button
+            type="button"
+            className="inv-btn"
+            title="Add one copy to inventory"
+            aria-label={`Add ${card.oracle.name} to inventory`}
+            onClick={() =>
+              run(() =>
+                addDeckCardToInventoryAction({ oracleId: card.oracleId, printingId: card.printingId, finish: card.finish }),
+              )
+            }
+            disabled={pending}
+          >
+            ＋inv
+          </button>
+        )}
         <select
           className="board-select"
           value={card.board}

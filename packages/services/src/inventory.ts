@@ -458,6 +458,35 @@ export async function deckAvailability(
   });
 }
 
+export interface OwnedPrinting {
+  printingId: string;
+  total: number;
+  byFinish: Record<string, number>;
+}
+
+/** Per-printing inventory ownership for one oracle card (for the printing picker). */
+export async function ownedPrintingsForOracle(
+  prisma: PrismaClient,
+  userId: string,
+  oracleId: string,
+): Promise<OwnedPrinting[]> {
+  const items = await prisma.inventoryItem.findMany({
+    where: { userId, printing: { oracleId } },
+    select: { printingId: true, finish: true, quantity: true },
+  });
+  const map = new Map<string, OwnedPrinting>();
+  for (const it of items) {
+    let e = map.get(it.printingId);
+    if (!e) {
+      e = { printingId: it.printingId, total: 0, byFinish: {} };
+      map.set(it.printingId, e);
+    }
+    e.total += it.quantity;
+    e.byFinish[it.finish] = (e.byFinish[it.finish] ?? 0) + it.quantity;
+  }
+  return [...map.values()];
+}
+
 export interface OwnedOption extends OracleCard {
   ownedQuantity: number;
   freeQuantity: number; // owned copies not committed to built decks

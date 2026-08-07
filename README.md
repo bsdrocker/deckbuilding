@@ -206,6 +206,17 @@ is marked `secure` behind HTTPS.
   `1 Sol Ring (C21) 263 *F*`) in addition to CSV; `*F*`/`*E*` set the finish
   (`POST /v1/inventory/import-list`).
 
+### Milestone 5.2 — printing picker polish
+
+- **Ownership in the printing picker** — printings you already own are badged
+  with a count (and a per-finish tooltip) and highlighted, with an "N in
+  inventory" summary (`GET /v1/inventory/owned-printings/:oracleId`).
+- **Search printings** — filter the picker by set code, set name, or collector
+  number (handy for cards with 100+ printings).
+- **Contextual ＋inv** — the deck-row "add to inventory" button now shows only
+  when a card actually needs it (missing copies, or the pinned printing/finish
+  isn't owned).
+
 ## Milestone 6+ (not yet built)
 
 Collaborative/multi-user decks, playtesting/sample hands, price history over
