@@ -228,11 +228,18 @@ button.danger:hover, .btn.danger:hover { background: #3a2020; filter: none; }
   display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;
 }
 .printing-option {
+  position: relative;
   background: var(--panel-2); border: 2px solid var(--border); border-radius: 12px;
   padding: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px;
 }
 .printing-option:hover { border-color: var(--accent); filter: none; }
 .printing-option.selected { border-color: var(--accent-2); box-shadow: 0 0 0 2px rgba(126,224,129,0.25); }
+.printing-option.owned { border-color: #2f5b34; }
+.printing-owned {
+  position: absolute; top: 10px; right: 10px; z-index: 1;
+  background: var(--accent-2); color: #0b1020; font-size: 11px; font-weight: 700;
+  padding: 1px 6px; border-radius: 999px; line-height: 1.5;
+}
 .printing-thumb { width: 100%; border-radius: 8px; aspect-ratio: 63/88; object-fit: cover; }
 .printing-thumb.placeholder {
   display: flex; align-items: center; justify-content: center; color: var(--muted);

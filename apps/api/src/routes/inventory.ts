@@ -5,6 +5,7 @@ import {
   findOwnedOptions,
   importInventoryCsv,
   importInventoryList,
+  ownedPrintingsForOracle,
   inventoryAllocation,
   inventorySummary,
   inventoryValueBreakdown,
@@ -151,6 +152,20 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
       },
     },
     async (req) => importInventoryList(app.prisma, req.user!.id, req.body.list),
+  );
+
+  r.get(
+    '/inventory/owned-printings/:oracleId',
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['inventory'],
+        summary: 'Per-printing ownership counts for one card (for the printing picker).',
+        security: [{ bearerAuth: [] }],
+        params: z.object({ oracleId: z.string() }),
+      },
+    },
+    async (req) => ({ owned: await ownedPrintingsForOracle(app.prisma, req.user!.id, req.params.oracleId) }),
   );
 
   r.patch(
