@@ -11,6 +11,8 @@ import {
   listDecks,
   parseDecklist,
   removeDeckCard,
+  removeDeckCardBySelector,
+  setDeckCardQuantity,
   updateDeck,
   updateDeckCard,
 } from '@deck/services';
@@ -185,6 +187,54 @@ export async function registerDeckRoutes(app: FastifyInstance) {
     async (req) => {
       const updated = await updateDeckCard(app.prisma, req.params.id, req.user!.id, req.params.cardId, req.body);
       return updated ?? { removed: true };
+    },
+  );
+
+  r.post(
+    '/decks/:id/cards/set',
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['decks'],
+        summary: 'Set a card quantity by selector (name/oracleId/cardId + board). Upserts; 0 removes.',
+        security: [{ bearerAuth: [] }],
+        params: z.object({ id: z.string() }),
+        body: z.object({
+          quantity: z.number().int().min(0),
+          name: z.string().optional(),
+          oracleId: z.string().optional(),
+          cardId: z.string().optional(),
+          board: z.enum(BOARDS).optional(),
+        }),
+      },
+    },
+    async (req) => {
+      const { quantity, ...selector } = req.body;
+      const updated = await setDeckCardQuantity(app.prisma, req.params.id, req.user!.id, selector, quantity);
+      return updated ?? { removed: true };
+    },
+  );
+
+  r.post(
+    '/decks/:id/cards/remove',
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['decks'],
+        summary: 'Remove a card by selector (name/oracleId/cardId + board).',
+        security: [{ bearerAuth: [] }],
+        params: z.object({ id: z.string() }),
+        body: z.object({
+          name: z.string().optional(),
+          oracleId: z.string().optional(),
+          cardId: z.string().optional(),
+          board: z.enum(BOARDS).optional(),
+        }),
+      },
+    },
+    async (req) => {
+      await removeDeckCardBySelector(app.prisma, req.params.id, req.user!.id, req.body);
+      return { removed: true };
     },
   );
 

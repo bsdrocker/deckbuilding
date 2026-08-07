@@ -252,6 +252,31 @@ describe('API integration', () => {
     });
   });
 
+  describe('selector-based deck-card ops', () => {
+    it('sets a card quantity by name (upsert) and removes it by selector', async () => {
+      const set = await app.inject({
+        method: 'POST',
+        url: `/v1/decks/${deckId}/cards/set`,
+        headers: authed(),
+        payload: { name: 'Llanowar Elves', quantity: 2, board: 'mainboard' },
+      });
+      expect(set.statusCode).toBe(200);
+      let deck = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
+      const row = deck.cards.find((c: { oracle: { name: string }; quantity: number }) => c.oracle.name === 'Llanowar Elves');
+      expect(row?.quantity).toBe(2);
+
+      const rem = await app.inject({
+        method: 'POST',
+        url: `/v1/decks/${deckId}/cards/remove`,
+        headers: authed(),
+        payload: { name: 'Llanowar Elves' },
+      });
+      expect(rem.statusCode).toBe(200);
+      deck = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
+      expect(deck.cards.find((c: { oracle: { name: string } }) => c.oracle.name === 'Llanowar Elves')).toBeUndefined();
+    });
+  });
+
   describe('public sharing', () => {
     let shareId: string;
     const setVisibility = (v: string) =>
