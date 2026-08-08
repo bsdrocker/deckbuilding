@@ -30,6 +30,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Link href="/decks">Decks</Link>
               <Link href="/cards">Cards</Link>
               <Link href="/inventory">Inventory</Link>
+              <Link href="/settings">Settings</Link>
             </>
           )}
           <span className="spacer" />

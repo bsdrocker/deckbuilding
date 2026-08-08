@@ -15,6 +15,15 @@ export interface DeckListItem {
   distinctCount: number;
 }
 
+export interface ApiKeyInfo {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
 export interface CardImageUris {
   small?: string;
   normal?: string;
