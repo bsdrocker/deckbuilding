@@ -161,6 +161,14 @@ button.danger:hover, .btn.danger:hover { background: #3a2020; filter: none; }
   height: 26px; padding: 0 8px; font-size: 12px; line-height: 1; color: var(--muted); white-space: nowrap;
 }
 .inv-btn:hover { background: var(--panel-2); color: var(--accent-2); filter: none; }
+
+/* One-time API key reveal. */
+.key-reveal { background: var(--panel-2); border: 1px solid #2f5b34; }
+.key-value {
+  flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+}
 .pill.status-built { color: var(--accent-2); border-color: #2f5b34; }
 .pill.status-brewing { color: var(--warn); border-color: #6b5a2f; }
 .text-danger { color: var(--danger); }

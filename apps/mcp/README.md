@@ -42,6 +42,9 @@ The server authenticates as a single user via an API key in `DECKBUILDER_API_KEY
 (a Bearer token in http mode, resolved against the DB in database mode). Create
 one through the API:
 
+The easiest way is the web app: sign in and go to **Settings → API keys**, create
+a key, and copy it (shown once). Or via the API:
+
 ```bash
 # Register (returns an apiKey) — or use POST /v1/keys if you already have one.
 curl -sX POST http://localhost:3001/v1/auth/register \

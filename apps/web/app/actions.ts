@@ -54,6 +54,27 @@ export async function registerAction(_prev: unknown, formData: FormData): Promis
   redirect('/decks');
 }
 
+export async function createApiKeyAction(
+  name: string,
+): Promise<{ error?: string; id?: string; raw?: string; prefix?: string }> {
+  if (!name.trim()) return { error: 'Enter a name for the key' };
+  const res = await apiFetch('/v1/keys', { method: 'POST', body: JSON.stringify({ name: name.trim() }) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.message ?? 'Could not create key' };
+  }
+  return res.json();
+}
+
+export async function revokeApiKeyAction(id: string): Promise<{ error?: string; ok?: boolean }> {
+  const res = await apiFetch(`/v1/keys/${id}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 204) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.message ?? 'Revoke failed' };
+  }
+  return { ok: true };
+}
+
 export async function logoutAction() {
   (await cookies()).delete(API_COOKIE);
   redirect('/login');
