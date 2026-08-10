@@ -4,7 +4,7 @@ An **API-first Magic: The Gathering deck-building platform**. Its defining featu
 a documented REST API **and** an MCP server, so Claude (or any tool) can read your
 decks, read your **card inventory**, and build/optimize decklists that favor cards
 you **already own**. Long-term goal is feature parity with Moxfield / Archidekt;
-**Milestones 1–5 are complete** (see the milestone notes below).
+**Milestones 1–5 are complete, M6 in progress** (see the milestone notes below).
 
 ## What's here
 
@@ -250,7 +250,14 @@ public sign-ups).
   when a card actually needs it (missing copies, or the pinned printing/finish
   isn't owned).
 
-## Milestone 6+ (not yet built)
+## Milestone 6 (in progress) — usability features
+
+- **Copy-limit overrides** — legality now honors cards that set their own copy
+  limit: "A deck can have any number of cards named …" (Relentless Rats,
+  Shadowborn Apostle) and "up to N" wording (nine Nazgûl, seven Seven Dwarves),
+  capping at the stated N instead of the format limit.
+
+## Milestone 7+ (not yet built)
 
 Collaborative/multi-user decks, playtesting/sample hands, price history over
 time, social features (likes/comments/follows), and further UI polish toward
