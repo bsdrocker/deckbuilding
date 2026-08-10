@@ -250,7 +250,7 @@ async function main() {
     'analyze_deck',
     {
       title: 'Analyze a deck',
-      description: 'Compute deck statistics (mana curve, color pips, types, price) and format legality.',
+      description: 'Compute deck statistics (mana curve, color pips, types, price) and format legality. For Commander decks, also includes a suggested bracket (2-4) with the Game Changer, mass-land-denial, and extra-turn cards found in the deck.',
       inputSchema: { deckId: z.string() },
     },
     async ({ deckId }) => {

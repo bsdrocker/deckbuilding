@@ -127,6 +127,13 @@ export interface DeckAnalysis {
     counted: number;
     commanderColorIdentity: string[] | null;
   };
+  bracket: {
+    suggested: number;
+    gameChangers: string[];
+    massLandDenial: string[];
+    extraTurns: string[];
+    caveats: string[];
+  } | null;
 }
 
 export interface InventoryDiff {
