@@ -1,5 +1,12 @@
 # M6 Handoff — Deckbuilding usability features
 
+> [!NOTE]
+> **✅ Completed in PRs #17–#20 (merged 2026-08-10).** All five M6 features
+> below have shipped: copy-limit overrides, Commander brackets, inventory
+> search, per-card deck prices, and owned-or-cheapest default printing. See the
+> README's Milestone 6 section for what shipped. This doc is kept as a
+> historical record of the plan and for the working conventions below.
+
 Context handoff for picking up **M6** in a fresh session. Goal: five usability
 features (below). Everything through M5.2 + M6 groundwork is already merged.
 
