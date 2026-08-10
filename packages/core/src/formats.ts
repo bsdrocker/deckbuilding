@@ -63,11 +63,29 @@ export function getFormatRule(format: string): FormatRule {
   return FORMAT_RULES[format] ?? FORMAT_RULES.casual!;
 }
 
-/** Basic lands and cards explicitly allowed in unlimited quantity. */
-export function isUnlimitedCard(card: CardData): boolean {
-  if (/\bBasic\b/.test(card.typeLine) && /\bLand\b/.test(card.typeLine)) return true;
+const WORD_NUMBERS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
+  nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15,
+};
+
+const UNLIMITED_RE = /a deck can have any number of cards named/i;
+const UP_TO_RE = /a deck can have up to (\d+|[a-z]+) cards? named/i;
+
+/**
+ * Copy-limit override granted by the card itself: Infinity for basic lands and
+ * "any number of cards named" cards, the stated N for "up to N cards named"
+ * cards (Nazgûl, Seven Dwarves), or null when the format's normal limit applies.
+ */
+export function copyLimitOverride(card: CardData): number | null {
+  if (/\bBasic\b/.test(card.typeLine) && /\bLand\b/.test(card.typeLine)) return Infinity;
   const text = card.oracleText ?? '';
-  return /A deck can have any number of cards named/i.test(text);
+  if (UNLIMITED_RE.test(text)) return Infinity;
+  const m = UP_TO_RE.exec(text);
+  if (m) {
+    const raw = m[1]!.toLowerCase();
+    return /^\d+$/.test(raw) ? Number(raw) : WORD_NUMBERS[raw] ?? null;
+  }
+  return null;
 }
 
 export interface ValidationIssue {
@@ -132,7 +150,7 @@ export function validateDeck(deck: DeckData): ValidationResult {
         issues.push({ code: 'not_legal', message: `${dc.card.name} is not legal in ${deck.format}.`, oracleId: dc.oracleId, cardName: dc.card.name });
       }
     }
-    const maxCopies = isUnlimitedCard(dc.card) ? Infinity : legality === 'restricted' ? 1 : rule.maxCopies;
+    const maxCopies = copyLimitOverride(dc.card) ?? (legality === 'restricted' ? 1 : rule.maxCopies);
     if (dc.quantity > maxCopies) {
       issues.push({
         code: 'copies',

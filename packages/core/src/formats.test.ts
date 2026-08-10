@@ -1,7 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { validateDeck } from './formats.js';
+import { copyLimitOverride, validateDeck } from './formats.js';
 import { CARDS, deckCard, makeCard } from './fixtures.js';
 import type { DeckData } from './types.js';
+
+const nazgul = makeCard({
+  oracleId: 'nazgul',
+  name: 'Nazgûl',
+  typeLine: 'Creature — Wraith Knight',
+  colorIdentity: ['B'],
+  oracleText: 'A deck can have up to nine cards named Nazgûl.',
+});
+const sevenDwarves = makeCard({
+  oracleId: 'seven-dwarves',
+  name: 'Seven Dwarves',
+  typeLine: 'Creature — Dwarf',
+  colorIdentity: ['R'],
+  oracleText: 'A deck can have up to seven cards named Seven Dwarves.',
+});
+const shadowbornApostle = makeCard({
+  oracleId: 'shadowborn-apostle',
+  name: 'Shadowborn Apostle',
+  typeLine: 'Creature — Human Cleric',
+  colorIdentity: ['B'],
+  oracleText: 'A deck can have any number of cards named Shadowborn Apostle.',
+});
 
 describe('validateDeck — commander', () => {
   it('flags off-color-identity cards', () => {
@@ -70,5 +92,42 @@ describe('validateDeck — constructed', () => {
   it('flags decks below the minimum size', () => {
     const deck: DeckData = { format: 'modern', cards: [deckCard(CARDS.lightningBolt, 4)] };
     expect(validateDeck(deck).issues.some((i) => i.code === 'deck_size')).toBe(true);
+  });
+});
+
+describe('copy-limit overrides', () => {
+  const copies = (deck: DeckData) => validateDeck(deck).issues.filter((i) => i.code === 'copies');
+
+  it('allows up to nine Nazgûl in commander and flags a tenth', () => {
+    const nine: DeckData = { format: 'commander', cards: [deckCard(nazgul, 9)] };
+    expect(copies(nine)).toHaveLength(0);
+
+    const ten: DeckData = { format: 'commander', cards: [deckCard(nazgul, 10)] };
+    const issue = copies(ten);
+    expect(issue).toHaveLength(1);
+    expect(issue[0]!.message).toContain('limit of 9');
+  });
+
+  it('caps "up to seven" above the constructed 4-of but below 8', () => {
+    const seven: DeckData = { format: 'standard', cards: [deckCard(sevenDwarves, 7)] };
+    expect(copies(seven)).toHaveLength(0);
+
+    const eight: DeckData = { format: 'standard', cards: [deckCard(sevenDwarves, 8)] };
+    expect(copies(eight)).toHaveLength(1);
+  });
+
+  it('still allows any number for "any number of cards named" text', () => {
+    const deck: DeckData = { format: 'commander', cards: [deckCard(shadowbornApostle, 25)] };
+    expect(copies(deck)).toHaveLength(0);
+  });
+
+  it('copyLimitOverride parses digits, words, basics, and fails safe', () => {
+    expect(copyLimitOverride(makeCard({ oracleId: 'x', name: 'X', oracleText: 'A deck can have up to 9 cards named X.' }))).toBe(9);
+    expect(copyLimitOverride(nazgul)).toBe(9);
+    expect(copyLimitOverride(sevenDwarves)).toBe(7);
+    expect(copyLimitOverride(shadowbornApostle)).toBe(Infinity);
+    expect(copyLimitOverride(makeCard({ oracleId: 'mtn', name: 'Mountain', typeLine: 'Basic Land — Mountain' }))).toBe(Infinity);
+    expect(copyLimitOverride(CARDS.lightningBolt)).toBeNull();
+    expect(copyLimitOverride(makeCard({ oracleId: 'y', name: 'Y', oracleText: 'A deck can have up to umpteen cards named Y.' }))).toBeNull();
   });
 });
