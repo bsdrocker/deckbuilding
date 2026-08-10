@@ -33,6 +33,7 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
           sort: z.enum(['name', 'set', 'value', 'recent']).default('name'),
           dir: z.enum(['asc', 'desc']).default('asc'),
           filter: z.enum(['all', 'used', 'unused', 'conflict']).default('all'),
+          q: z.string().trim().max(200).optional(),
         }),
       },
     },

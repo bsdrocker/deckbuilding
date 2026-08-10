@@ -26,17 +26,19 @@ const FILTERS: { value: Filter; label: string }[] = [
 export default async function InventoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; sort?: string; dir?: string; filter?: string }>;
+  searchParams: Promise<{ page?: string; sort?: string; dir?: string; filter?: string; q?: string }>;
 }) {
   const sp = await searchParams;
   const sort = (['name', 'set', 'value', 'recent'].includes(sp.sort ?? '') ? sp.sort : 'name') as Sort;
   const dir: Dir = sp.dir === 'desc' ? 'desc' : 'asc';
   const filter = (['all', 'used', 'unused', 'conflict'].includes(sp.filter ?? '') ? sp.filter : 'all') as Filter;
+  const q = (sp.q ?? '').trim();
+  const qParam = q ? `&q=${encodeURIComponent(q)}` : '';
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
   const [listRes, summaryRes, valueRes, allocRes] = await Promise.all([
-    apiFetch(`/v1/inventory?limit=${PAGE_SIZE}&offset=${offset}&sort=${sort}&dir=${dir}&filter=${filter}`),
+    apiFetch(`/v1/inventory?limit=${PAGE_SIZE}&offset=${offset}&sort=${sort}&dir=${dir}&filter=${filter}${qParam}`),
     apiFetch('/v1/inventory/summary'),
     apiFetch('/v1/inventory/value'),
     apiFetch('/v1/inventory/allocation'),
@@ -55,11 +57,11 @@ export default async function InventoryPage({
   // Build a header link that toggles direction when already sorting by that column.
   const sortHref = (col: Sort) => {
     const nextDir: Dir = sort === col ? (dir === 'asc' ? 'desc' : 'asc') : col === 'value' ? 'desc' : 'asc';
-    return `/inventory?sort=${col}&dir=${nextDir}&filter=${filter}&page=1`;
+    return `/inventory?sort=${col}&dir=${nextDir}&filter=${filter}&page=1${qParam}`;
   };
   const arrow = (col: Sort) => (sort === col ? (dir === 'asc' ? ' ▲' : ' ▼') : '');
-  const pageHref = (p: number) => `/inventory?sort=${sort}&dir=${dir}&filter=${filter}&page=${p}`;
-  const filterHref = (f: Filter) => `/inventory?sort=${sort}&dir=${dir}&filter=${f}&page=1`;
+  const pageHref = (p: number) => `/inventory?sort=${sort}&dir=${dir}&filter=${filter}&page=${p}${qParam}`;
+  const filterHref = (f: Filter) => `/inventory?sort=${sort}&dir=${dir}&filter=${f}&page=1${qParam}`;
 
   return (
     <div className="grid" style={{ gap: 16 }}>
@@ -173,13 +175,33 @@ export default async function InventoryPage({
               ))}
             </span>
           </div>
-          <span className="muted">
-            {from}–{to} of {total}
-          </span>
+          <div className="row wrap" style={{ gap: 10 }}>
+            <form method="get" className="row" style={{ gap: 8 }}>
+              <input name="q" defaultValue={q} placeholder="Search by card name" />
+              <input type="hidden" name="sort" value={sort} />
+              <input type="hidden" name="dir" value={dir} />
+              <input type="hidden" name="filter" value={filter} />
+              <button type="submit" className="btn secondary">
+                Search
+              </button>
+              {q && (
+                <Link className="btn secondary" href={`/inventory?sort=${sort}&dir=${dir}&filter=${filter}&page=1`}>
+                  ✕ Clear
+                </Link>
+              )}
+            </form>
+            <span className="muted">
+              {from}–{to} of {total}
+            </span>
+          </div>
         </div>
         {total === 0 ? (
           <p className="muted" style={{ marginTop: 10 }}>
-            {filter === 'all' ? 'Nothing yet. Add cards above.' : `No ${filter} cards.`}
+            {q
+              ? `No cards matching "${q}".`
+              : filter === 'all'
+                ? 'Nothing yet. Add cards above.'
+                : `No ${filter} cards.`}
           </p>
         ) : (
           <>

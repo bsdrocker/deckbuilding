@@ -62,6 +62,8 @@ export interface ListInventoryOptions {
   dir?: SortDir;
   /** Restrict to cards used-by / free-of / in conflict with built decks. */
   filter?: AllocationFilter;
+  /** Case-insensitive card-name substring filter. */
+  q?: string;
 }
 
 type InventoryRow = Prisma.InventoryItemGetPayload<{ include: typeof INVENTORY_INCLUDE }>;
@@ -104,12 +106,16 @@ export async function listInventory(
 
   const alloc = await inventoryAllocation(prisma, userId);
 
+  const q = opts.q?.trim();
   const where: Prisma.InventoryItemWhereInput = { userId };
+  const printingWhere: Prisma.CardPrintingWhereInput = {};
   if (filter !== 'all') {
     const ids = oracleIdsForFilter(alloc, filter);
     if (ids.length === 0) return { total: 0, items: [] };
-    where.printing = { oracleId: { in: ids } };
+    printingWhere.oracleId = { in: ids };
   }
+  if (q) printingWhere.oracle = { name: { contains: q, mode: 'insensitive' } };
+  if (filter !== 'all' || q) where.printing = printingWhere;
 
   const total = await prisma.inventoryItem.count({ where });
 

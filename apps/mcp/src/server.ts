@@ -267,18 +267,19 @@ async function main() {
     {
       title: 'Get inventory',
       description:
-        "List the user's card inventory with a summary (distinct cards, copies, value) and allocation (how many copies are used by built decks vs. free). Filter by used/unused/conflict.",
+        "List the user's card inventory with a summary (distinct cards, copies, value) and allocation (how many copies are used by built decks vs. free). Filter by used/unused/conflict, or search by card name with q.",
       inputSchema: {
         limit: z.number().int().min(1).max(200).optional(),
         offset: z.number().int().min(0).optional(),
         sort: z.enum(['name', 'set', 'value', 'recent']).optional(),
         dir: z.enum(['asc', 'desc']).optional(),
         filter: z.enum(['all', 'used', 'unused', 'conflict']).optional(),
+        q: z.string().optional().describe('Filter by card name (case-insensitive substring).'),
       },
     },
-    async ({ limit, offset, sort, dir, filter }) => {
+    async ({ limit, offset, sort, dir, filter, q }) => {
       try {
-        return json(await backend.getInventory({ limit, offset, sort, dir, filter }));
+        return json(await backend.getInventory({ limit, offset, sort, dir, filter, q }));
       } catch (err) {
         return errorResult(err);
       }

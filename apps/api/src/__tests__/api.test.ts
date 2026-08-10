@@ -138,6 +138,31 @@ describe('API integration', () => {
     expect(body.options.some((o: { name: string }) => o.name === 'Sol Ring')).toBe(true);
   });
 
+  it('searches inventory by card name', async () => {
+    // Sol Ring was added to inventory in the diff test above.
+    const hit = await app.inject({ method: 'GET', url: '/v1/inventory?q=sol%20ri', headers: authed() });
+    expect(hit.statusCode).toBe(200);
+    const body = hit.json();
+    expect(body.total).toBeGreaterThanOrEqual(1);
+    for (const item of body.items) {
+      expect(item.printing.oracle.name.toLowerCase()).toContain('sol ri');
+    }
+
+    const miss = await app.inject({ method: 'GET', url: '/v1/inventory?q=zzzznotacard', headers: authed() });
+    expect(miss.json()).toMatchObject({ total: 0, items: [] });
+
+    // q must survive the in-memory value-sort branch and merge with allocation filters.
+    const valueSorted = await app.inject({ method: 'GET', url: '/v1/inventory?q=sol&sort=value&dir=desc', headers: authed() });
+    expect(valueSorted.statusCode).toBe(200);
+    expect(valueSorted.json().total).toBe(body.total);
+
+    const filtered = await app.inject({ method: 'GET', url: '/v1/inventory?q=sol&filter=unused', headers: authed() });
+    expect(filtered.statusCode).toBe(200);
+    for (const item of filtered.json().items) {
+      expect(item.printing.oracle.name.toLowerCase()).toContain('sol');
+    }
+  });
+
   it('manages deck cards: update quantity then remove', async () => {
     const deck = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
     const bolt = deck.cards.find((c: { oracle: { name: string } }) => c.oracle.name === 'Lightning Bolt');
