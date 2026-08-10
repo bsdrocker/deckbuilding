@@ -3,6 +3,7 @@ import type { DeckBoard, DeckFormat, DeckStatus, PrismaClient } from '@deck/db';
 import { printingRefKey, resolveNames, resolvePrintingRefs } from './cards.js';
 import { loadDeck } from './deckData.js';
 import { ServiceError } from './errors.js';
+import { cheapestPrintings } from './prices.js';
 
 export interface CreateDeckInput {
   name: string;
@@ -122,6 +123,43 @@ export interface AddCardsResult {
 }
 
 /**
+ * Default printing per oracle for newly added deck cards: the printing the
+ * user owns the most copies of, else the cheapest known printing. Oracles with
+ * neither are absent from the map (printingId stays null → newest-printing
+ * display, as before).
+ */
+async function defaultPrintingIds(
+  prisma: PrismaClient,
+  userId: string,
+  oracleIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (oracleIds.length === 0) return out;
+
+  const items = await prisma.inventoryItem.findMany({
+    where: { userId, printing: { oracleId: { in: oracleIds } } },
+    select: { printingId: true, quantity: true, printing: { select: { oracleId: true } } },
+  });
+  const ownedQty = new Map<string, Map<string, number>>(); // oracleId -> printingId -> qty
+  for (const it of items) {
+    const per = ownedQty.get(it.printing.oracleId) ?? new Map<string, number>();
+    per.set(it.printingId, (per.get(it.printingId) ?? 0) + it.quantity);
+    ownedQty.set(it.printing.oracleId, per);
+  }
+  for (const [oracleId, per] of ownedQty) {
+    // Most-owned printing; ties break on printingId so the pick is deterministic.
+    const best = [...per.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]!;
+    out.set(oracleId, best[0]);
+  }
+
+  const unowned = oracleIds.filter((id) => !out.has(id));
+  const cheapest = await cheapestPrintings(prisma, unowned);
+  for (const [oracleId, c] of cheapest) out.set(oracleId, c.printingId);
+
+  return out;
+}
+
+/**
  * Add cards to a deck. Each entry may specify an oracleId or a name; quantities
  * on an existing (deck, card, board) row are incremented.
  */
@@ -145,11 +183,14 @@ export async function addCardsToDeck(
   const { resolved } = await resolveNames(prisma, namesToResolve);
 
   const unresolved: string[] = [];
-  let added = 0;
+  const toAdd: { entry: CardEntryInput; oracleId: string; explicitPrintingId: string | null }[] = [];
   for (const entry of entries) {
     let oracleId = entry.oracleId;
+    let explicitPrintingId: string | null = null;
     if (!oracleId && entry.setCode && entry.collectorNumber) {
-      oracleId = byPrinting.get(printingRefKey(entry.setCode, entry.collectorNumber))?.oracleId;
+      const hit = byPrinting.get(printingRefKey(entry.setCode, entry.collectorNumber));
+      oracleId = hit?.oracle.oracleId;
+      explicitPrintingId = hit?.printingId ?? null;
     }
     if (!oracleId && entry.name) oracleId = resolved.get(entry.name.trim())?.oracleId;
     if (!oracleId) {
@@ -159,12 +200,32 @@ export async function addCardsToDeck(
       }
       continue;
     }
+    toAdd.push({ entry, oracleId, explicitPrintingId });
+  }
 
+  // Entries without an explicit printing get an owned-else-cheapest default,
+  // so new deck cards show art (and price) the user actually has. Applied on
+  // create only — re-adding a card never retargets an existing row's printing.
+  const defaults = await defaultPrintingIds(
+    prisma,
+    userId,
+    [...new Set(toAdd.filter((t) => !t.explicitPrintingId).map((t) => t.oracleId))],
+  );
+
+  let added = 0;
+  for (const { entry, oracleId, explicitPrintingId } of toAdd) {
     const quantity = entry.quantity ?? 1;
     const board = (entry.board ?? 'mainboard') as DeckBoard;
     await prisma.deckCard.upsert({
       where: { deckId_oracleId_board: { deckId, oracleId, board } },
-      create: { deckId, oracleId, board, quantity, categories: entry.categories ?? [] },
+      create: {
+        deckId,
+        oracleId,
+        board,
+        quantity,
+        categories: entry.categories ?? [],
+        printingId: explicitPrintingId ?? defaults.get(oracleId) ?? null,
+      },
       update: {
         quantity: { increment: quantity },
         ...(entry.categories ? { categories: entry.categories } : {}),

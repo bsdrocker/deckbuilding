@@ -406,6 +406,8 @@ export interface DeckCardAvailability {
    */
   printingStatus: 'owned' | 'not_owned' | null;
   ownedPrintingQty: number; // copies of the pinned printing (matching finish) owned
+  /** Unit USD: the pinned printing's finish-aware price, else the cheapest printing's. */
+  priceUsd: number | null;
 }
 
 /**
@@ -437,6 +439,8 @@ export async function deckAvailability(
     byPrintingFinish.set(k, (byPrintingFinish.get(k) ?? 0) + it.quantity);
   }
 
+  const prices = await representativePrices(prisma, deck.cards.map((c) => c.oracleId));
+
   return deck.cards.map((c) => {
     const ownedOracle = byOracle.get(c.oracleId) ?? 0;
     const missing = Math.max(0, c.quantity - ownedOracle);
@@ -450,6 +454,10 @@ export async function deckAvailability(
       printingStatus = ownedPrintingQty > 0 ? 'owned' : 'not_owned';
     }
 
+    const rawPrice = c.printing
+      ? finishPrice(c.printing.prices, c.finish ?? 'nonfoil') ?? prices.get(c.oracleId) ?? null
+      : prices.get(c.oracleId) ?? null;
+
     return {
       deckCardId: c.id,
       oracleId: c.oracleId,
@@ -460,6 +468,7 @@ export async function deckAvailability(
       finish: c.finish,
       printingStatus,
       ownedPrintingQty,
+      priceUsd: rawPrice == null ? null : Math.round(rawPrice * 100) / 100,
     };
   });
 }

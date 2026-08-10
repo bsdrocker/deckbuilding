@@ -265,6 +265,14 @@ public sign-ups).
 - **Inventory search** — filter the inventory by card name (`q` on
   `GET /v1/inventory`, the `get_inventory` MCP tool, and a search box on the
   inventory page that survives sorting, filtering, and pagination).
+- **Per-card prices in the deck view** — every deck row shows its unit USD
+  price (the pinned printing's finish-aware price, else the cheapest printing),
+  via `priceUsd` on `GET /v1/decks/:id/availability`.
+- **Owned-or-cheapest default printing** — newly added deck cards pin a
+  printing automatically: the one you own the most copies of, else the
+  cheapest, so art and price reflect your collection. Explicit set+collector
+  adds (now supported on `POST /v1/decks/:id/cards`) pin that exact printing;
+  re-adding never retargets an existing row.
 
 ## Milestone 7+ (not yet built)
 
