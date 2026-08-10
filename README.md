@@ -262,6 +262,9 @@ public sign-ups).
   the matched cards listed on the deck and share pages (and in the
   `analyze_deck` MCP tool). Tutor density and combos are not detected — the
   suggestion is a lower bound.
+- **Inventory search** — filter the inventory by card name (`q` on
+  `GET /v1/inventory`, the `get_inventory` MCP tool, and a search box on the
+  inventory page that survives sorting, filtering, and pagination).
 
 ## Milestone 7+ (not yet built)
 

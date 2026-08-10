@@ -50,6 +50,7 @@ export interface GetInventoryOpts {
   sort?: 'name' | 'set' | 'value' | 'recent';
   dir?: 'asc' | 'desc';
   filter?: 'all' | 'used' | 'unused' | 'conflict';
+  q?: string;
 }
 export interface OwnedOptionsOpts {
   limit?: number;
