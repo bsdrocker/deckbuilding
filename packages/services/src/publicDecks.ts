@@ -1,6 +1,5 @@
-import { computeDeckStats, validateDeck } from '@deck/core';
 import type { DeckFormat, Prisma, PrismaClient } from '@deck/db';
-import type { DeckAnalysis } from './analysis.js';
+import { buildDeckAnalysis, type DeckAnalysis } from './analysis.js';
 import { loadDeckByShareId, toDeckData, type PublicDeck } from './deckData.js';
 import { ServiceError } from './errors.js';
 
@@ -35,7 +34,7 @@ export async function analyzePublicDeck(prisma: PrismaClient, shareId: string): 
   const deck = await loadDeckByShareId(prisma, shareId);
   assertPublic(deck);
   const deckData = await toDeckData(prisma, deck);
-  return { stats: computeDeckStats(deckData), validation: validateDeck(deckData) };
+  return buildDeckAnalysis(deckData);
 }
 
 export interface PublicBrowseOptions {

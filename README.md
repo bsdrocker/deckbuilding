@@ -256,6 +256,12 @@ public sign-ups).
   limit: "A deck can have any number of cards named …" (Relentless Rats,
   Shadowborn Apostle) and "up to N" wording (nine Nazgûl, seven Seven Dwarves),
   capping at the stated N instead of the format limit.
+- **Commander brackets** — deck analysis classifies Commander decks under the
+  WotC bracket system: the official 53-card Game Changers list plus small
+  maintained mass-land-denial and extra-turn lists suggest Bracket 2/3/4, with
+  the matched cards listed on the deck and share pages (and in the
+  `analyze_deck` MCP tool). Tutor density and combos are not detected — the
+  suggestion is a lower bound.
 
 ## Milestone 7+ (not yet built)
 

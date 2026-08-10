@@ -13,6 +13,7 @@ import {
 import { CardNameButton } from '@/components/CardNameButton';
 import { ColorDots } from '@/components/ColorDots';
 import { ManaCurve } from '@/components/ManaCurve';
+import BracketPanel from '@/components/BracketPanel';
 import { CloneDeckButton } from './CloneDeckButton';
 
 export default async function PublicDeckPage({ params }: { params: Promise<{ shareId: string }> }) {
@@ -140,6 +141,8 @@ export default async function PublicDeckPage({ params }: { params: Promise<{ sha
                 </div>
               ))}
           </div>
+
+          {analysis.bracket && <BracketPanel bracket={analysis.bracket} />}
         </div>
       </div>
     </div>

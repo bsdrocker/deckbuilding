@@ -5,6 +5,7 @@ import type { Deck, DeckAnalysis, DeckCardAvailability, InventoryDiff } from '@/
 import { BOARD_LABELS, BOARD_ORDER, TYPE_LABELS, groupByBoard, groupByType } from '@/lib/deckGrouping';
 import { ColorDots } from '@/components/ColorDots';
 import { ManaCurve } from '@/components/ManaCurve';
+import BracketPanel from '@/components/BracketPanel';
 import { AddCardForm } from './AddCardForm';
 import { DeckCardRow } from './DeckCardRow';
 import { DeckStatusToggle } from './DeckStatusToggle';
@@ -164,6 +165,8 @@ export default async function DeckPage({ params }: { params: Promise<{ id: strin
                 </div>
               ))}
           </div>
+
+          {analysis.bracket && <BracketPanel bracket={analysis.bracket} />}
 
           {!analysis.validation.legal && (
             <div className="panel">
