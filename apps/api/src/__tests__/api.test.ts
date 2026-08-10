@@ -236,6 +236,84 @@ describe('API integration', () => {
       expect(sol.printingStatus).toBe('not_owned'); // own a different printing/finish
     });
 
+    it('includes a unit price on availability rows', async () => {
+      const avail = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}/availability`, headers: authed() })).json();
+      expect(avail.cards.length).toBeGreaterThan(0);
+      for (const c of avail.cards) {
+        expect(c.priceUsd === null || (typeof c.priceUsd === 'number' && c.priceUsd >= 0)).toBe(true);
+      }
+      // Sol Ring definitely has price data in the Scryfall import.
+      const priced = avail.cards.find((c: { priceUsd: number | null }) => c.priceUsd != null);
+      expect(priced).toBeDefined();
+    });
+
+    it('defaults new deck cards to an owned printing, else the cheapest', async () => {
+      // We own a Sol Ring printing — adding Sol Ring to a fresh board should pin it.
+      const ownedItem = await prisma.inventoryItem.findFirst({
+        where: { userId, printing: { oracle: { name: { equals: 'Sol Ring', mode: 'insensitive' } } } },
+      });
+      expect(ownedItem).toBeDefined();
+      await app.inject({
+        method: 'POST',
+        url: `/v1/decks/${deckId}/cards`,
+        headers: authed(),
+        payload: { cards: [{ name: 'Sol Ring', board: 'sideboard' }] },
+      });
+      let deck = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
+      const sideSol = deck.cards.find(
+        (c: { board: string; oracle: { name: string } }) => c.board === 'sideboard' && c.oracle.name === 'Sol Ring',
+      );
+      expect(sideSol.printingId).toBe(ownedItem!.printingId);
+
+      // A card we don't own gets its cheapest printing pinned.
+      await app.inject({
+        method: 'POST',
+        url: `/v1/decks/${deckId}/cards`,
+        headers: authed(),
+        payload: { cards: [{ name: 'Grizzly Bears', board: 'sideboard' }] },
+      });
+      deck = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
+      const bears = deck.cards.find(
+        (c: { board: string; oracle: { name: string } }) => c.board === 'sideboard' && c.oracle.name === 'Grizzly Bears',
+      );
+      expect(bears.printingId).toBeTruthy();
+
+      // Incrementing an existing row never retargets its printing.
+      await app.inject({
+        method: 'POST',
+        url: `/v1/decks/${deckId}/cards`,
+        headers: authed(),
+        payload: { cards: [{ name: 'Sol Ring', board: 'sideboard' }] },
+      });
+      deck = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
+      const sideSol2 = deck.cards.find(
+        (c: { board: string; oracle: { name: string } }) => c.board === 'sideboard' && c.oracle.name === 'Sol Ring',
+      );
+      expect(sideSol2.quantity).toBe(2);
+      expect(sideSol2.printingId).toBe(ownedItem!.printingId);
+    });
+
+    it('persists an explicitly referenced printing (set + collector number)', async () => {
+      const printing = await prisma.cardPrinting.findFirst({
+        where: { oracle: { name: { equals: 'Giant Growth', mode: 'insensitive' } } },
+      });
+      expect(printing).toBeDefined();
+      await app.inject({
+        method: 'POST',
+        url: `/v1/decks/${deckId}/cards`,
+        headers: authed(),
+        payload: {
+          cards: [{ setCode: printing!.setCode, collectorNumber: printing!.collectorNumber, board: 'sideboard' }],
+        },
+      });
+      const deck = (await app.inject({ method: 'GET', url: `/v1/decks/${deckId}`, headers: authed() })).json();
+      const growth = deck.cards.find(
+        (c: { board: string; oracle: { name: string } }) => c.board === 'sideboard' && c.oracle.name === 'Giant Growth',
+      );
+      expect(growth).toBeDefined();
+      expect(growth.printingId).toBe(printing!.scryfallId);
+    });
+
     it('reports per-printing ownership for the printing picker', async () => {
       const oracle = await prisma.oracleCard.findFirst({
         where: { name: { equals: 'Sol Ring', mode: 'insensitive' } },

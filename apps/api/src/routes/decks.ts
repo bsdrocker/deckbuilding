@@ -34,6 +34,8 @@ const cardEntry = z.object({
   quantity: z.number().int().min(1).default(1),
   board: z.enum(BOARDS).default('mainboard'),
   categories: z.array(z.string()).optional(),
+  setCode: z.string().optional(),
+  collectorNumber: z.string().optional(),
 });
 
 export async function registerDeckRoutes(app: FastifyInstance) {

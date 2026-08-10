@@ -235,16 +235,17 @@ export function printingRefKey(setCode: string, collectorNumber: string): string
 }
 
 /**
- * Resolve (setCode, collectorNumber) pairs to their oracle cards. This is how
- * flavor-named reprints and single-face lookups resolve when the printed name
- * isn't the oracle name (e.g. Secret Lair "Adamantium Bonding Tank" = The
- * Ozolith). Keys in the returned map come from {@link printingRefKey}.
+ * Resolve (setCode, collectorNumber) pairs to their oracle cards and the exact
+ * printing that matched. This is how flavor-named reprints and single-face
+ * lookups resolve when the printed name isn't the oracle name (e.g. Secret
+ * Lair "Adamantium Bonding Tank" = The Ozolith). Keys in the returned map come
+ * from {@link printingRefKey}.
  */
 export async function resolvePrintingRefs(
   prisma: PrismaClient,
   refs: { setCode: string; collectorNumber: string }[],
-): Promise<Map<string, OracleCard>> {
-  const resolved = new Map<string, OracleCard>();
+): Promise<Map<string, { oracle: OracleCard; printingId: string }>> {
+  const resolved = new Map<string, { oracle: OracleCard; printingId: string }>();
   const unique = new Map<string, { setCode: string; collectorNumber: string }>();
   for (const r of refs) {
     if (!r.setCode || !r.collectorNumber) continue;
@@ -262,7 +263,10 @@ export async function resolvePrintingRefs(
     include: { oracle: true },
   });
   for (const p of printings) {
-    resolved.set(printingRefKey(p.setCode, p.collectorNumber), p.oracle);
+    resolved.set(printingRefKey(p.setCode, p.collectorNumber), {
+      oracle: p.oracle,
+      printingId: p.scryfallId,
+    });
   }
   return resolved;
 }

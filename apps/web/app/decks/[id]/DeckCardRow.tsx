@@ -104,6 +104,11 @@ export function DeckCardRow({
       </span>
 
       <span className="row" style={{ gap: 8 }}>
+        {availability?.priceUsd != null && (
+          <span className="muted price" title="Unit price (pinned printing, or the cheapest)">
+            ${availability.priceUsd.toFixed(2)}
+          </span>
+        )}
         <span className="muted mana">{card.oracle.manaCost ?? ''}</span>
         {needsInv && (
           <button

@@ -102,6 +102,7 @@ export interface DeckCardAvailability {
   finish: string | null;
   printingStatus: 'owned' | 'not_owned' | null;
   ownedPrintingQty: number;
+  priceUsd: number | null;
 }
 
 export interface ManaCurveBucket {
